@@ -761,7 +761,7 @@ div.pnlm-tooltip:hover span{visibility:visible}
    (ex.: app "1.0.1" ↔ sw "tkd-view-v1.0.1"). Ao refrescar o link,
    o número no rodapé confirma se a nova versão foi aplicada.
    ============================================================ */
-var APP_VERSION = "1.0.7";
+var APP_VERSION = "1.0.8";
 
 /* PIN de administração — MUDE antes de publicar. */
 var ADMIN_PIN = "8484";
@@ -1414,6 +1414,22 @@ function renderEditorSuave(){
 function linkPartilha(){
   return location.origin==="null"?location.href.split("?")[0]:location.origin+location.pathname;
 }
+/* O convite leva a senha (?k=) e, se houver sincronização activa,
+   também a ligação ao Firebase (&c=, codificada). O aparelho do
+   cliente guarda-a na primeira abertura e liga-se sozinho — nunca
+   é preciso configurar nada do lado do cliente. */
+function linkConvite(p){
+  var base=linkPartilha()+"?k="+encodeURIComponent(p.senha);
+  var cfg=configEfetiva();
+  if(cfg){
+    try{
+      var b=btoa(JSON.stringify(cfg))
+        .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+      base+="&c="+b;
+    }catch(e){}
+  }
+  return base;
+}
 $("btn-guardar-geral").addEventListener("click",function(){
   var p=projAtivo;
   p.nome=$("f-nome").value.trim();p.cliente=$("f-cli").value.trim();
@@ -1424,13 +1440,13 @@ $("btn-guardar-geral").addEventListener("click",function(){
 $("btn-copiar-acesso").addEventListener("click",function(){
   var p=projAtivo;
   copiar("TKD — The Koncept Design\nProjecto: "+p.nome
-    +"\nLink: "+linkPartilha()+"?k="+encodeURIComponent(p.senha)
+    +"\nLink: "+linkConvite(p)
     +"\nSenha: "+p.senha,"Convite copiado — pronto a enviar.");
 });
 $("btn-wa").addEventListener("click",function(){
   var p=projAtivo;
   var txt="TKD — The Koncept Design\nProjecto: "+p.nome
-    +"\nLink: "+linkPartilha()+"?k="+encodeURIComponent(p.senha)
+    +"\nLink: "+linkConvite(p)
     +"\nSenha: "+p.senha;
   window.open("https://wa.me/?text="+encodeURIComponent(txt),"_blank");
 });
@@ -2366,7 +2382,7 @@ function abrirAjustes(){
     +'<textarea id="aj-cfg" spellcheck="false" style="font-family:var(--font-mono);font-size:12px;min-height:120px" '
       +'placeholder=\'{ "apiKey": "…", "databaseURL": "https://….firebasedatabase.app", "projectId": "…", "storageBucket": "….appspot.com" }\'>'
       +esc(guardada?JSON.stringify(guardada,null,2):"")+'</textarea>'
-    +'<p class="hint">Aceita o formato JSON ou o excerto tal como o Firebase o mostra. '
+    +'<p class="hint">Configura-se <b>apenas neste aparelho principal</b>: os links de convite passam a transportar a ligação, e cada cliente fica ligado automaticamente na primeira abertura — sem configurar nada. Aceita o formato JSON ou o excerto tal como o Firebase o mostra. '
       +'Com <b>storageBucket</b>, os botões «⭱ Carregar do aparelho» ficam activos — estado actual: '
       +'<b>'+((efetiva&&efetiva.storageBucket)?"upload directo disponível":"upload indisponível")+'</b>.</p>'
     +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'
@@ -2454,9 +2470,25 @@ $("btn-ajustes").addEventListener("click",abrirAjustes);
 (function arranque(){
   carregarLocal();
   ligarUpload("f-cup",{maxW:1600,pasta:"capas"},function(u){$("f-capa").value=u});
-  /* preencher senha vinda do convite (?k=…) */
-  var k=new URLSearchParams(location.search).get("k");
+  /* convite: preencher a senha (?k=) e absorver a ligação (&c=) */
+  var params=new URLSearchParams(location.search);
+  var k=params.get("k");
   if(k)$("gate-pass").value=k;
+  var c=params.get("c");
+  if(c){
+    try{
+      var cfgConvite=JSON.parse(atob(c.replace(/-/g,"+").replace(/_/g,"/")));
+      /* só na primeira vez — um aparelho já ligado não é alterado por links */
+      if(cfgConvite&&cfgConvite.apiKey&&cfgConvite.projectId&&cfgConvite.databaseURL
+         &&!lerConfigFBGuardada()){
+        localStorage.setItem("tkdview_fbcfg",JSON.stringify(cfgConvite));
+        localStorage.removeItem("tkdview_sync_off");
+      }
+    }catch(e){}
+    /* limpar o URL, mantendo apenas a senha */
+    try{history.replaceState(null,"",
+      location.pathname+(k?"?k="+encodeURIComponent(k):""))}catch(e){}
+  }
   /* no arranque o traço corre em silêncio (os browsers não permitem
      áudio sem gesto); se o utilizador tocar durante a cortina, o
      traço reinicia JUNTO com o som — perfeitamente sincronizados */

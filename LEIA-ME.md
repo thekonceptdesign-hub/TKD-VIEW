@@ -1,4 +1,4 @@
-# TKD VIEW — v1.0.7
+# TKD VIEW — v1.0.8
 
 Visualização interactiva de projectos para clientes: tour 360º com hotspots, revisões, decisões rápidas e mensagens. Segue o blueprint do TKD HUB (APP_VERSION ↔ CACHE_VERSION, sincronização Firebase com escritas parciais, PWA offline).
 
@@ -7,6 +7,7 @@ Visualização interactiva de projectos para clientes: tour 360º com hotspots, 
 2. Abra o `index.html` e mude o `ADMIN_PIN` (por omissão `8484`).
 3. **Firebase pelo painel de Ajustes (recomendado):** entre na administração, toque em ⚙ e cole a configuração do Firebase (a mesma do TKD HUB). Fica guardada no aparelho e liga de imediato. Em alternativa, pode fixá-la no código (`FIREBASE_CONFIG` no topo do `<script>`). Sem configuração, a app funciona só em modo local — os clientes noutros aparelhos não verão nada.
    No painel de Ajustes também pode: desligar/religar a sincronização, ver o estado do upload directo (requer `storageBucket`), procurar actualizações e recarregar a app com limpeza de cache.
+   **Os clientes não configuram nada**: os links de convite («Copiar convite» / WhatsApp) transportam a ligação ao Firebase codificada (&c=…). O aparelho do cliente guarda-a na primeira abertura e liga-se sozinho; a partir daí recebe imagens, revisões, decisões e mensagens em tempo real. A configuração web do Firebase é pública por natureza — a protecção dos dados faz-se nas regras da base de dados, não no segredo da configuração.
 4. A cada nova publicação, suba `APP_VERSION` no `index.html` **e** `CACHE_VERSION` no `sw.js` na mesma sequência (1.0.0 → 1.0.1 → …). O rodapé mostra a versão activa e o aviso «Nova versão disponível» aparece nos aparelhos dos clientes.
 
 ## Fluxo de trabalho
