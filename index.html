@@ -761,7 +761,7 @@ div.pnlm-tooltip:hover span{visibility:visible}
    (ex.: app "1.0.1" ↔ sw "tkd-view-v1.0.1"). Ao refrescar o link,
    o número no rodapé confirma se a nova versão foi aplicada.
    ============================================================ */
-var APP_VERSION = "1.0.8";
+var APP_VERSION = "1.0.9";
 
 /* PIN de administração — MUDE antes de publicar. */
 var ADMIN_PIN = "8484";
@@ -1136,6 +1136,79 @@ function correrIntro(alvoFn,revelar){
 }
 
 
+
+/* ============================================================
+   IMAGENS SEM STORAGE — guardadas na Realtime Database
+   A imagem é comprimida no aparelho e gravada (texto) no nó
+   tkdview/imagens/{id}; o projecto guarda só a referência
+   "img:{id}". Os aparelhos dos clientes resolvem-na pela mesma
+   sincronização — sem Firebase Storage e sem serviços extra.
+   ============================================================ */
+var IMGC={},IMGpend={};
+function ehRefImg(u){return typeof u==="string"&&u.indexOf("img:")===0}
+var PIXEL="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
+function srcDe(u){
+  if(!ehRefImg(u))return u||"";
+  var id=u.slice(4);
+  if(IMGC[id])return IMGC[id];
+  pedirImg(id);
+  return PIXEL;
+}
+function pedirImg(id){
+  if(IMGC[id]||IMGpend[id]||!fb.ref)return;
+  IMGpend[id]=true;
+  fb.ref.child("imagens/"+id).once("value").then(function(sn){
+    delete IMGpend[id];
+    var v=sn.val();
+    if(v){IMGC[id]=v;agendarRefresco()}
+  }).catch(function(){delete IMGpend[id]});
+}
+function resolverImgs(urls){
+  return Promise.all(urls.map(function(u){
+    if(!ehRefImg(u))return Promise.resolve(u||"");
+    var id=u.slice(4);
+    if(IMGC[id])return Promise.resolve(IMGC[id]);
+    if(!fb.ref)return Promise.resolve("");
+    return fb.ref.child("imagens/"+id).once("value").then(function(sn){
+      IMGC[id]=sn.val()||"";return IMGC[id];
+    }).catch(function(){return ""});
+  }));
+}
+var _refrescoT=null;
+function agendarRefresco(){
+  clearTimeout(_refrescoT);
+  _refrescoT=setTimeout(function(){
+    if(vistaAtual==="client"&&projCliente){montarTourCliente();renderClRevs();renderClPran()}
+    if(vistaAtual==="editor"&&projAtivo)renderEditorSuave();
+    if(vistaAtual==="admin")renderAdminGrid();
+    if(anot.aberta){var pr=anotPrancha();if(pr)$("anot-img").src=srcDe(pr.url)}
+  },160);
+}
+/* compressão progressiva até caber confortavelmente num nó da BD */
+function comprimirParaDataUrl(file,maxW){
+  return new Promise(function(res,rej){
+    var img=new Image();
+    img.onload=function(){
+      var LIMITE=1900000; /* ~1,4 MB de imagem em base64 */
+      var qs=[0.8,0.65,0.5],w0=Math.min(img.width,maxW),melhor=null;
+      for(var passo=0;passo<4&&!melhor;passo++){
+        var w=Math.round(w0*Math.pow(0.82,passo)),
+            h=Math.round(img.height*(w/img.width));
+        var cv=document.createElement("canvas");cv.width=w;cv.height=h;
+        cv.getContext("2d").drawImage(img,0,0,w,h);
+        for(var i=0;i<qs.length;i++){
+          var d=cv.toDataURL("image/jpeg",qs[i]);
+          if(d.length<=LIMITE){melhor=d;break}
+        }
+      }
+      URL.revokeObjectURL(img.src);
+      melhor?res(melhor):rej(new Error("grande"));
+    };
+    img.onerror=function(){URL.revokeObjectURL(img.src);rej(new Error("img"))};
+    img.src=URL.createObjectURL(file);
+  });
+}
+
 /* ============================================================
    UPLOAD DIRECTO — Firebase Storage
    As imagens são redimensionadas e comprimidas no aparelho antes
@@ -1158,8 +1231,10 @@ function redimensionarImg(file,maxW){
 }
 function uploadImagem(file,opts){
   opts=opts||{};
+  var cfg=configEfetiva();
+  var temStorage=cfg&&cfg.storageBucket&&window.firebase&&firebase.storage;
+  if(!temStorage)return uploadParaBD(file,opts);
   return new Promise(function(res,rej){
-    if(!configEfetiva()||!window.firebase||!firebase.storage){rej(new Error("sem-storage"));return}
     redimensionarImg(file,opts.maxW||2000).then(function(blob){
       var caminho=FB_RAIZ+"/"+(opts.pasta||"geral")+"/"+uid()+".jpg";
       var ref=firebase.storage().ref().child(caminho);
@@ -1173,6 +1248,25 @@ function uploadImagem(file,opts){
     }).catch(rej);
   });
 }
+/* sem Storage: comprimir e gravar na Realtime Database */
+function uploadParaBD(file,opts){
+  toast("A preparar a imagem…",{fixo:true});
+  var maxW=Math.min(opts.maxW||1600,(opts.pasta==="cenas")?4096:1600);
+  return comprimirParaDataUrl(file,maxW).then(function(dataUrl){
+    if(fb.ref){
+      var id=uid();
+      return fb.ref.child("imagens/"+id).set(dataUrl).then(function(){
+        IMGC[id]=dataUrl;
+        toast("Imagem guardada na base de dados.");
+        return "img:"+id;
+      });
+    }
+    toast("Modo local — a imagem fica embutida só neste aparelho.");
+    return dataUrl;
+  }).catch(function(e){
+    toast("Não foi possível preparar a imagem.");throw e;
+  });
+}
 /* HTML do botão de upload para usar dentro dos modais */
 function htmlUpload(pref,multiplo){
   return '<div style="margin-top:8px"><button type="button" class="btn mini ghost" id="'+pref+'-btn">⭱ Carregar do aparelho</button>'
@@ -1181,12 +1275,7 @@ function htmlUpload(pref,multiplo){
 function ligarUpload(pref,opts,aoUrl){
   var b=$(pref+"-btn"),f=$(pref+"-file");
   if(!b||!f)return;
-  b.onclick=function(){
-    var cfg=configEfetiva();
-    if(!cfg){toast("Abra os Ajustes (⚙) e ligue o Firebase para carregar ficheiros.");return}
-    if(!cfg.storageBucket){toast("A configuração não tem storageBucket — acrescente-o nos Ajustes.");return}
-    f.click();
-  };
+  b.onclick=function(){f.click()};
   f.onchange=function(){
     var fics=Array.prototype.slice.call(f.files||[]);
     if(!fics.length)return;
@@ -1327,7 +1416,7 @@ function renderAdminGrid(){
   g.innerHTML=lista.map(function(p){
     var nDecPend=Object.values(p.decisoes||{}).filter(function(d){return !d.resposta}).length;
     return '<div class="card proj-card" data-id="'+p.id+'"><span class="corner tl"></span><span class="corner br"></span>'
-      +(p.capa?'<div class="capa" style="background-image:url(\''+esc(p.capa)+'\')"></div>':'')
+      +(p.capa?'<div class="capa" style="background-image:url(\''+esc(srcDe(p.capa))+'\')"></div>':'')
       +'<span class="tag '+esc(p.estado||"curso")+'">'+nomeEstado(p.estado)+'</span>'
       +'<h3 style="margin-top:12px">'+esc(p.nome||"Sem nome")+'</h3>'
       +'<div class="cli">'+esc(p.cliente||"")+'</div>'
@@ -1488,7 +1577,7 @@ function renderListaCenas(){
   }
   l.innerHTML=cenas.map(function(c){
     var nHs=Object.keys(c.hotspots||{}).length;
-    return '<div class="item"><div class="thumb" style="background-image:url(\''+esc(c.url)+'\')"></div>'
+    return '<div class="item"><div class="thumb" style="background-image:url(\''+esc(srcDe(c.url))+'\')"></div>'
       +'<div class="grow"><div class="t">'+esc(c.nome)+(c.inicial?' <span class="chip-ini">inicial</span>':'')+'</div>'
       +'<div class="s">'+nHs+' hotspot'+(nHs===1?"":"s")+'</div></div>'
       +'<div class="acts">'
@@ -1567,10 +1656,14 @@ $("btn-colocar-hs").addEventListener("click",function(){
   $("pano-admin").style.cursor=modoColocar?"crosshair":"";
 });
 function montarViewerAdmin(){
-  if(adminViewer){try{adminViewer.destroy()}catch(e){}}
+  if(adminViewer){try{adminViewer.destroy()}catch(e){}adminViewer=null}
   var c=projAtivo.cenas[cenaHsId];
+  if(ehRefImg(c.url)&&!IMGC[c.url.slice(4)]){
+    resolverImgs([c.url]).then(function(){if(cenaHsId===c.id)montarViewerAdmin()});
+    return;
+  }
   adminViewer=pannellum.viewer("pano-admin",{
-    type:"equirectangular",panorama:c.url,autoLoad:true,showZoomCtrl:false,
+    type:"equirectangular",panorama:srcDe(c.url),autoLoad:true,showZoomCtrl:false,
     hfov:100,friction:0.15,
     hotSpots:hotspotsPannellum(c,null,true)
   });
@@ -1682,7 +1775,7 @@ function renderListaPran(){
   }
   l.innerHTML=prs.map(function(pr){
     var n=contagemTracos(pr),nn=Object.keys(pr.notas||{}).length;
-    return '<div class="item"><div class="thumb" style="background-image:url(\''+esc(pr.url)+'\')"></div>'
+    return '<div class="item"><div class="thumb" style="background-image:url(\''+esc(srcDe(pr.url))+'\')"></div>'
       +'<div class="grow"><div class="t">'+esc(pr.nome)+'</div>'
       +'<div class="s">'+((n.total||nn)?(n.cliente+' marc. do cliente · '+n.tkd+' da TKD'+(nn?' · '+nn+' nota'+(nn===1?'':'s'):'')):'sem marcações')+'</div></div>'
       +'<div class="acts">'
@@ -1729,7 +1822,7 @@ function renderClPran(){
   l.innerHTML=prs.length?prs.map(function(pr){
     var n=contagemTracos(pr),tot=n.total+Object.keys(pr.notas||{}).length;
     return '<div class="card pran-card" data-ab="'+pr.id+'"><span class="corner tl"></span><span class="corner br"></span>'
-      +'<img loading="lazy" src="'+esc(pr.url)+'" alt="">'
+      +'<img loading="lazy" src="'+esc(srcDe(pr.url))+'" alt="">'
       +'<div class="t">'+esc(pr.nome)+'</div>'
       +'<div class="s">'+(tot?'<span class="mark">'+tot+' marcaç'+(tot===1?'ão':'ões')+'</span>':'toque para marcar')+'</div>'
       +'</div>';
@@ -1822,9 +1915,9 @@ document.querySelectorAll(".dot-cor").forEach(function(d){
   $("anot-titulo").textContent=pr.nome;
   anotModo("caneta");
   $("anot").classList.add("on");
-  var img=$("anot-img");
+  var img=$("anot-img"),src=srcDe(pr.url);
   img.onload=anotDimensionar;
-  if(img.src===pr.url)anotDimensionar();else img.src=pr.url;
+  if(img.src===src&&src!==PIXEL)anotDimensionar();else img.src=src;
 }
 function fecharAnotador(){
   anot.aberta=false;anot.desenhando=false;
@@ -1996,10 +2089,10 @@ $("btn-nova-rev").addEventListener("click",function(){
   };
 });
 function blocoRev(r){
-  var imgs=(r.imagens||[]).map(function(u){return '<img loading="lazy" src="'+esc(u)+'" data-lb="'+esc(u)+'" alt="">'}).join("");
+  var imgs=(r.imagens||[]).map(function(u){return '<img loading="lazy" src="'+esc(srcDe(u))+'" data-lb alt="">'}).join("");
   var cmp=(r.antes&&r.depois)?
-    '<div class="cmp" data-cmp><img class="base" src="'+esc(r.antes)+'" alt="Antes">'
-    +'<img class="top" src="'+esc(r.depois)+'" alt="Depois"><div class="bar"></div>'
+    '<div class="cmp" data-cmp><img class="base" src="'+esc(srcDe(r.antes))+'" alt="Antes">'
+    +'<img class="top" src="'+esc(srcDe(r.depois))+'" alt="Depois"><div class="bar"></div>'
     +'<span class="lbl a">Antes</span><span class="lbl b">Depois</span></div>':'';
   return '<div class="rev"><span class="v">REV '+String(r.versao).padStart(2,"0")+'</span>'
     +'<h4>'+esc(r.titulo)+'</h4><div class="d">'+fmtData(r.data)+'</div>'
@@ -2009,7 +2102,7 @@ function blocoRev(r){
 }
 function ligarImgs(raiz){
   raiz.querySelectorAll("[data-lb]").forEach(function(im){
-    im.onclick=function(){abrirLb(im.dataset.lb)};
+    im.onclick=function(){abrirLb(im.src)};
   });
 }
 function ligarCmps(raiz){
@@ -2252,7 +2345,7 @@ function montarTourCliente(suave){
   var p=projCliente,cenas=cenasOrdenadas(p),shell=$("pano");
   $("cl-cenas").innerHTML=cenas.map(function(c){
     return '<button class="scene-chip'+((cenaClAtiva||{} ).id===c.id?' on':'')+'" data-c="'+c.id+'">'
-      +'<img loading="lazy" src="'+esc(c.url)+'" alt=""><span>'+esc(c.nome)+'</span></button>';
+      +'<img loading="lazy" src="'+esc(srcDe(c.url))+'" alt=""><span>'+esc(c.nome)+'</span></button>';
   }).join("");
   $("cl-cenas").querySelectorAll(".scene-chip").forEach(function(b){
     b.onclick=function(){irParaCena(b.dataset.c)};
@@ -2265,6 +2358,15 @@ function montarTourCliente(suave){
   }
   /* evitar reconstruir o viewer num sync se as cenas não mudaram */
   if(suave&&clViewer&&JSON.stringify(cenas)===montarTourCliente._ultimo)return;
+  /* imagens guardadas na BD: esperar que cheguem antes de construir */
+  var porResolver=cenas.some(function(c){return ehRefImg(c.url)&&!IMGC[c.url.slice(4)]});
+  if(porResolver){
+    if(!clViewer)shell.innerHTML='<div class="pano-empty"><div class="tkd-logo sm"><div class="q">T</div><div class="q">K</div><div class="q">D</div></div><span>A carregar o tour 360º…</span></div>';
+    resolverImgs(cenas.map(function(c){return c.url})).then(function(){
+      if(vistaAtual==="client")montarTourCliente(suave);
+    });
+    return;
+  }
   montarTourCliente._ultimo=JSON.stringify(cenas);
   if(clViewer){try{clViewer.destroy()}catch(e){}clViewer=null}
   shell.innerHTML="";
@@ -2272,7 +2374,7 @@ function montarTourCliente(suave){
   cenaClAtiva=inicial;
   var scenes={};
   cenas.forEach(function(c){
-    scenes[c.id]={type:"equirectangular",panorama:c.url,
+    scenes[c.id]={type:"equirectangular",panorama:srcDe(c.url),
       hotSpots:hotspotsPannellum(c,irParaCena,false)};
   });
   clViewer=pannellum.viewer("pano",{
@@ -2383,8 +2485,10 @@ function abrirAjustes(){
       +'placeholder=\'{ "apiKey": "…", "databaseURL": "https://….firebasedatabase.app", "projectId": "…", "storageBucket": "….appspot.com" }\'>'
       +esc(guardada?JSON.stringify(guardada,null,2):"")+'</textarea>'
     +'<p class="hint">Configura-se <b>apenas neste aparelho principal</b>: os links de convite passam a transportar a ligação, e cada cliente fica ligado automaticamente na primeira abertura — sem configurar nada. Aceita o formato JSON ou o excerto tal como o Firebase o mostra. '
-      +'Com <b>storageBucket</b>, os botões «⭱ Carregar do aparelho» ficam activos — estado actual: '
-      +'<b>'+((efetiva&&efetiva.storageBucket)?"upload directo disponível":"upload indisponível")+'</b>.</p>'
+      +'Upload directo — estado actual: <b>'
+      +((efetiva&&efetiva.storageBucket)?"via Firebase Storage"
+        :efetiva?"pela base de dados (sem Storage; imagens comprimidas até ≈1,4 MB)"
+        :"modo local — imagens só neste aparelho")+'</b>.</p>'
     +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'
       +'<button class="btn mini accent" id="aj-ligar">Guardar e ligar</button>'
       +(efetiva?'<button class="btn mini danger" id="aj-off">Desligar sincronização</button>':'')

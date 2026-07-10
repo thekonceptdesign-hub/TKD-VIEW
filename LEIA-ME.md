@@ -1,4 +1,4 @@
-# TKD VIEW — v1.0.8
+# TKD VIEW — v1.0.9
 
 Visualização interactiva de projectos para clientes: tour 360º com hotspots, revisões, decisões rápidas e mensagens. Segue o blueprint do TKD HUB (APP_VERSION ↔ CACHE_VERSION, sincronização Firebase com escritas parciais, PWA offline).
 
@@ -14,8 +14,11 @@ Visualização interactiva de projectos para clientes: tour 360º com hotspots, 
 - **Administração**: no portão, toque em «Acesso TKD» e insira o PIN. Crie o projecto (a senha única é gerada automaticamente), adicione as cenas 360º, coloque os hotspots clicando na imagem, publique revisões e peça decisões.
 - **Cliente**: recebe o convite (botão «Copiar convite» — link + senha). Entra com a senha e vê apenas o seu projecto: passeia pelo 360º, acompanha as revisões, decide com um toque e conversa consigo. O link com `?k=SENHA` pré-preenche a senha.
 
-## Upload directo (Firebase Storage)
-Os botões «⭱ Carregar do aparelho» (cenas, pranchas, capa e revisões) sobem as imagens para o Firebase Storage já redimensionadas e comprimidas. Requisitos: o `FIREBASE_CONFIG` deve incluir `storageBucket`, e as regras do Storage devem permitir leitura pública e escrita (idealmente limitada — p. ex. só com App Check ou autenticação anónima). Sem Storage configurado, continue a colar URLs.
+## Upload directo — dois caminhos automáticos
+Os botões «⭱ Carregar do aparelho» (cenas, pranchas, capa e revisões) escolhem sozinhos o destino:
+1. **Com `storageBucket` configurado** → Firebase Storage (melhor para imagens grandes; requer regras de Storage com leitura pública).
+2. **Sem Storage** → a imagem é comprimida no PC (JPEG, até ≈1,4 MB; cenas 360 até 4096 px) e gravada na própria **Realtime Database** (`tkdview/imagens/{id}`); o projecto guarda só a referência `img:{id}` e os clientes recebem-na pela sincronização normal. Zero serviços extra.
+Atenção às quotas do plano gratuito da Realtime Database (1 GB de armazenamento, 10 GB/mês de transferência): para uso moderado chega bem; se o volume crescer, active o Storage. Em modo local (sem Firebase), a imagem fica embutida apenas nesse aparelho.
 
 ## Acta de decisões (PDF)
 No editor, aba Decisões → «Exportar acta (PDF)»: abre um documento imprimível com todas as decisões (respondidas e pendentes), as notas ancoradas nas pranchas e linhas de assinatura. Use «Guardar como PDF» na janela de impressão. Permita pop-ups no browser.
