@@ -1,0 +1,2389 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TKD VIEW — Visualização de Projectos</title>
+<meta name="description" content="TKD VIEW — visualização interactiva de projectos, revisões e decisões. The Koncept Design.">
+<meta name="theme-color" content="#0B0B0A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<!-- Pannellum: motor de visualização 360º (equirectangular) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   TKD VIEW — identidade
+   Linguagem herdada do TKD HUB: planta técnica / blueprint.
+   Fundo quase-preto, traço branco fino, grelha técnica,
+   anotações em mono (cotas), acento âmbar quente (madeira).
+   ============================================================ */
+:root{
+  --bg:#0B0B0A;
+  --panel:#12120F;
+  --panel-2:#171712;
+  --line:#26261F;
+  --line-soft:#1C1C16;
+  --ink:#EDEDE6;
+  --muted:#8A8A7C;
+  --faint:#5A5A4D;
+  --accent:#C89B5A;         /* âmbar / madeira */
+  --accent-ink:#0B0B0A;
+  --ok:#8FBF7F;
+  --warn:#D9825A;
+  --danger:#C96A5A;
+  --font-ui:'Space Grotesk',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+  --r:14px;
+  --shadow:0 20px 60px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-ui);
+  font-weight:300;
+  letter-spacing:.01em;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+/* grelha técnica de fundo — assinatura blueprint */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    linear-gradient(var(--line-soft) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+  background-size:84px 84px;               /* a cota do logo */
+  mask-image:radial-gradient(ellipse 90% 80% at 50% 0%,black 0%,transparent 78%);
+  -webkit-mask-image:radial-gradient(ellipse 90% 80% at 50% 0%,black 0%,transparent 78%);
+  opacity:.5;
+}
+::selection{background:var(--accent);color:var(--accent-ink)}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit;color:var(--ink)}
+input,textarea,select{
+  width:100%;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:10px;padding:12px 14px;font-size:15px;font-weight:300;outline:none;
+  transition:border-color .25s ease;
+}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+input::placeholder,textarea::placeholder{color:var(--faint)}
+textarea{resize:vertical;min-height:84px}
+label{display:block;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+a{color:var(--accent);text-decoration:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- botões ---------- */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;justify-content:center;
+  background:var(--ink);color:var(--bg);border:1px solid var(--ink);
+  border-radius:999px;padding:11px 22px;font-size:14px;font-weight:500;
+  letter-spacing:.04em;transition:transform .2s ease,opacity .2s ease;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--muted)}
+.btn.accent{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{background:transparent;color:var(--danger);border-color:rgba(201,106,90,.4)}
+.btn.mini{padding:7px 14px;font-size:12.5px}
+.btn[disabled]{opacity:.45;pointer-events:none}
+
+/* ---------- estrutura ---------- */
+.view{display:none;position:relative;z-index:1;min-height:100dvh}
+.view.on{display:block}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+
+/* ---------- logo (autorizado: identidade TKD) ---------- */
+.tkd-logo{display:inline-flex;flex-direction:column;gap:2px}
+.tkd-logo .q{
+  width:30px;height:30px;border:1.5px solid var(--ink);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:13px;font-weight:400;color:var(--ink);
+}
+.tkd-logo.sm .q{width:22px;height:22px;font-size:10px;border-width:1px}
+
+/* ---------- portão de entrada ---------- */
+#view-gate{display:none;align-items:center;justify-content:center;padding:32px 20px}
+#view-gate.on{display:flex}
+.gate-card{width:100%;max-width:400px;text-align:center;position:relative}
+.gate-card .tkd-logo{margin:0 auto 26px}
+.gate-title{font-size:26px;font-weight:300;letter-spacing:.02em}
+.gate-title b{font-weight:600}
+.gate-sub{font-family:var(--font-mono);font-size:11px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--muted);margin:10px 0 34px}
+.gate-form{position:relative}
+.gate-form input{
+  text-align:center;font-family:var(--font-mono);font-size:17px;letter-spacing:.28em;
+  text-transform:uppercase;padding:15px 16px;
+}
+.gate-err{min-height:20px;font-size:13px;color:var(--danger);margin-top:12px}
+.gate-admin{margin-top:44px;font-family:var(--font-mono);font-size:10.5px;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--faint);
+  background:none;border:none;transition:color .25s}
+.gate-admin:hover{color:var(--accent)}
+/* cotas decorativas do cartão de entrada */
+.gate-card::before,.gate-card::after{
+  content:"";position:absolute;width:14px;height:14px;border:1px solid var(--faint);
+  opacity:.6;pointer-events:none;
+}
+.gate-card::before{top:-22px;left:-22px;border-right:none;border-bottom:none}
+.gate-card::after{bottom:-22px;right:-22px;border-left:none;border-top:none}
+
+/* ---------- barra topo ---------- */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;gap:14px;
+  padding:14px 20px;
+  background:rgba(11,11,10,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line-soft);
+}
+.topbar .grow{flex:1;min-width:0}
+.topbar h1{font-size:16px;font-weight:500;letter-spacing:.02em;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.topbar .sub{font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted);margin-top:2px}
+.icon-btn{
+  width:36px;height:36px;border-radius:50%;border:1px solid var(--line);
+  background:transparent;color:var(--muted);display:inline-flex;align-items:center;
+  justify-content:center;font-size:15px;transition:all .25s;flex:none;
+}
+.icon-btn:hover{color:var(--ink);border-color:var(--muted)}
+
+/* estado de sincronização */
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.sync-dot.on{background:var(--ok);box-shadow:0 0 8px rgba(143,191,127,.6)}
+.sync-dot.local{background:var(--warn)}
+
+/* ---------- etiquetas de estado ---------- */
+.tag{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--muted);
+}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--muted)}
+.tag.curso{color:var(--accent);border-color:rgba(200,155,90,.35)}
+.tag.curso::before{background:var(--accent)}
+.tag.decisao{color:var(--warn);border-color:rgba(217,130,90,.35)}
+.tag.decisao::before{background:var(--warn)}
+.tag.aprovado{color:var(--ok);border-color:rgba(143,191,127,.35)}
+.tag.aprovado::before{background:var(--ok)}
+
+/* ---------- cartões ---------- */
+.card{
+  position:relative;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--r);padding:22px;
+}
+.card .corner{position:absolute;width:10px;height:10px;border:1px solid var(--faint);
+  opacity:.55;pointer-events:none}
+.card .corner.tl{top:-1px;left:-1px;border-right:none;border-bottom:none;border-top-left-radius:var(--r)}
+.card .corner.br{bottom:-1px;right:-1px;border-left:none;border-top:none;border-bottom-right-radius:var(--r)}
+
+/* ---------- painel admin ---------- */
+.admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;padding:26px 0 60px}
+.proj-card{cursor:pointer;transition:transform .25s ease,border-color .25s ease}
+.proj-card:hover{transform:translateY(-3px);border-color:var(--muted)}
+.proj-card h3{font-size:18px;font-weight:500;margin:2px 0 4px}
+.proj-card .cli{font-size:13.5px;color:var(--muted)}
+.proj-card .meta{display:flex;gap:14px;margin-top:16px;font-family:var(--font-mono);
+  font-size:10.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
+.proj-card .capa{
+  height:130px;border-radius:10px;margin:-6px -6px 14px;background:var(--panel-2) center/cover no-repeat;
+  border:1px solid var(--line-soft);position:relative;overflow:hidden;
+}
+.proj-card .capa::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 55%,rgba(11,11,10,.55))}
+.empty{
+  text-align:center;padding:80px 20px;color:var(--muted);
+}
+.empty .cota{font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--faint);margin-top:8px}
+
+/* editor de projecto */
+.ed-head{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:26px 0 8px}
+.ed-head h2{font-size:24px;font-weight:300;flex:1;min-width:200px}
+.ed-head h2 b{font-weight:600}
+.ed-tabs,.cl-tabs{display:flex;gap:6px;overflow-x:auto;padding:16px 0 4px;scrollbar-width:none}
+.ed-tabs::-webkit-scrollbar,.cl-tabs::-webkit-scrollbar{display:none}
+.tab{
+  flex:none;background:transparent;border:1px solid var(--line);color:var(--muted);
+  border-radius:999px;padding:9px 18px;font-size:13px;letter-spacing:.03em;
+  transition:all .25s;
+}
+.tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:500}
+.tab .n{font-family:var(--font-mono);font-size:10px;margin-left:6px;color:var(--accent)}
+.tab.on .n{color:inherit}
+.pane{display:none;padding:20px 0 70px}
+.pane.on{display:block}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+@media(max-width:640px){.row{grid-template-columns:1fr}}
+.hint{font-size:12.5px;color:var(--faint);margin-top:6px;line-height:1.5}
+.list{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+.item{
+  display:flex;align-items:center;gap:14px;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+}
+.item .thumb{width:64px;height:44px;border-radius:8px;background:var(--panel-2) center/cover;
+  border:1px solid var(--line-soft);flex:none}
+.item .grow{flex:1;min-width:0}
+.item .t{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .s{font-family:var(--font-mono);font-size:10.5px;color:var(--faint);letter-spacing:.08em;
+  margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .acts{display:flex;gap:6px;flex:none}
+.chip-ini{font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;color:var(--accent);
+  border:1px solid rgba(200,155,90,.35);border-radius:999px;padding:3px 8px;text-transform:uppercase}
+
+/* senha / partilha */
+.share-box{
+  font-family:var(--font-mono);background:var(--panel-2);border:1px dashed var(--line);
+  border-radius:10px;padding:14px 16px;font-size:13px;letter-spacing:.06em;
+  color:var(--ink);display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.share-box .k{color:var(--faint);font-size:10px;letter-spacing:.18em;text-transform:uppercase}
+
+/* ---------- vista do cliente ---------- */
+.cl-hero{padding:34px 0 6px}
+.cl-hero .eyebrow{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--accent)}
+.cl-hero h2{font-size:clamp(26px,5vw,40px);font-weight:300;margin:10px 0 6px;letter-spacing:-.01em}
+.cl-hero h2 b{font-weight:600}
+.cl-hero .cli{color:var(--muted);font-size:15px}
+.cl-hero .head-row{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:16px}
+
+/* tour 360 */
+.pano-shell{position:relative;border:1px solid var(--line);border-radius:var(--r);
+  overflow:hidden;background:var(--panel);box-shadow:var(--shadow)}
+#pano,#pano-admin{width:100%;height:min(62vh,560px);background:var(--panel)}
+.pano-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:300px;color:var(--muted);gap:8px}
+.scene-chips{display:flex;gap:8px;overflow-x:auto;padding:14px 2px;scrollbar-width:none}
+.scene-chips::-webkit-scrollbar{display:none}
+.scene-chip{
+  flex:none;display:flex;align-items:center;gap:8px;background:var(--panel);
+  border:1px solid var(--line);border-radius:999px;padding:8px 16px 8px 8px;
+  color:var(--muted);font-size:13px;transition:all .25s;
+}
+.scene-chip img{width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid var(--line)}
+.scene-chip.on{color:var(--ink);border-color:var(--accent)}
+.pano-cota{
+  position:absolute;left:14px;bottom:12px;z-index:5;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(237,237,230,.75);background:rgba(11,11,10,.55);backdrop-filter:blur(6px);
+  border:1px solid rgba(237,237,230,.15);border-radius:999px;padding:6px 12px;pointer-events:none;
+}
+
+/* hotspots personalizados (pannellum) */
+.hs-tkd{width:34px;height:34px;border-radius:50%;
+  border:1.5px solid rgba(237,237,230,.9);background:rgba(11,11,10,.45);
+  backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;
+  color:#EDEDE6;font-size:13px;transition:transform .25s,background .25s;cursor:pointer}
+.hs-tkd::after{content:"→"}
+.hs-tkd.info::after{content:"i";font-family:var(--font-mono);font-style:normal}
+.hs-tkd:hover{transform:scale(1.15);background:rgba(200,155,90,.85);color:#0B0B0A;border-color:transparent}
+div.pnlm-tooltip span{font-family:var(--font-ui);font-size:13px;background:rgba(11,11,10,.9);
+  border:1px solid var(--line);border-radius:8px;padding:8px 12px;max-width:240px}
+div.pnlm-tooltip:hover span{visibility:visible}
+
+/* revisões — linha do tempo */
+.rev-line{position:relative;margin-top:10px;padding-left:26px}
+.rev-line::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:1px;
+  background:var(--line)}
+.rev{position:relative;padding:0 0 34px}
+.rev::before{content:"";position:absolute;left:-24px;top:6px;width:9px;height:9px;
+  border:1.5px solid var(--accent);border-radius:50%;background:var(--bg)}
+.rev .v{font-family:var(--font-mono);font-size:11px;letter-spacing:.18em;color:var(--accent);
+  text-transform:uppercase}
+.rev h4{font-size:18px;font-weight:500;margin:6px 0 4px}
+.rev .d{font-family:var(--font-mono);font-size:10.5px;color:var(--faint);letter-spacing:.08em}
+.rev p{color:var(--muted);font-size:14.5px;line-height:1.65;margin-top:10px;max-width:640px;white-space:pre-wrap}
+.rev-imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
+.rev-imgs img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;
+  border:1px solid var(--line);cursor:zoom-in;transition:transform .25s}
+.rev-imgs img:hover{transform:scale(1.02)}
+
+/* comparador antes/depois */
+.cmp{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);
+  margin-top:14px;max-width:640px;aspect-ratio:16/10;user-select:none;touch-action:none}
+.cmp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.cmp .top{clip-path:inset(0 0 0 var(--x,50%))}
+.cmp .bar{position:absolute;top:0;bottom:0;left:var(--x,50%);width:1.5px;background:var(--ink);cursor:ew-resize}
+.cmp .bar::after{content:"◂ ▸";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:var(--ink);color:var(--bg);font-size:10px;padding:6px 8px;border-radius:999px;white-space:nowrap}
+.cmp .lbl{position:absolute;bottom:10px;font-family:var(--font-mono);font-size:9.5px;
+  letter-spacing:.16em;text-transform:uppercase;background:rgba(11,11,10,.6);padding:4px 10px;
+  border-radius:999px;color:rgba(237,237,230,.85)}
+.cmp .lbl.a{left:10px}.cmp .lbl.b{right:10px}
+
+/* decisões */
+.dec{margin-bottom:16px}
+.dec .q{font-size:17px;font-weight:500;line-height:1.5}
+.dec .opts{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.dec .resp{margin-top:14px;padding:14px 16px;border-left:2px solid var(--ok);
+  background:var(--panel-2);border-radius:0 10px 10px 0}
+.dec .resp .r{font-weight:500;color:var(--ok)}
+.dec .resp .c{color:var(--muted);font-size:14px;margin-top:6px;white-space:pre-wrap}
+.dec .resp .d{font-family:var(--font-mono);font-size:10px;color:var(--faint);margin-top:8px;letter-spacing:.1em}
+
+/* mensagens */
+.msgs{display:flex;flex-direction:column;gap:10px;margin:16px 0}
+.msg{max-width:78%;padding:12px 16px;border-radius:14px;font-size:14.5px;line-height:1.55;white-space:pre-wrap}
+.msg .d{font-family:var(--font-mono);font-size:9.5px;color:var(--faint);margin-top:6px;letter-spacing:.1em}
+.msg.cliente{align-self:flex-end;background:var(--ink);color:var(--bg);border-bottom-right-radius:4px}
+.msg.cliente .d{color:rgba(11,11,10,.55)}
+.msg.tkd{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg-form{display:flex;gap:10px}
+.msg-form input{flex:1}
+
+/* ---------- modal genérico ---------- */
+.modal-bg{position:fixed;inset:0;z-index:80;background:rgba(5,5,4,.72);
+  backdrop-filter:blur(8px);display:none;align-items:flex-end;justify-content:center;padding:20px}
+.modal-bg.on{display:flex}
+@media(min-width:640px){.modal-bg{align-items:center}}
+.modal{width:100%;max-width:520px;max-height:86dvh;overflow-y:auto;
+  background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;
+  animation:mup .35s cubic-bezier(.3,1,.4,1)}
+@keyframes mup{from{transform:translateY(26px);opacity:0}to{transform:none;opacity:1}}
+.modal h3{font-size:19px;font-weight:500;margin-bottom:4px}
+.modal .sub{font-size:13px;color:var(--muted)}
+.modal .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:26px}
+
+/* lightbox */
+.lb{position:fixed;inset:0;z-index:90;background:rgba(5,5,4,.9);display:none;
+  align-items:center;justify-content:center;padding:26px;cursor:zoom-out}
+.lb.on{display:flex}
+.lb img{max-width:100%;max-height:100%;border-radius:12px;border:1px solid var(--line)}
+
+/* toast */
+#toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);z-index:100;
+  background:var(--ink);color:var(--bg);padding:12px 22px;border-radius:999px;
+  font-size:13.5px;font-weight:500;opacity:0;pointer-events:none;transition:all .35s ease;
+  max-width:88vw;text-align:center}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+#toast.update{cursor:pointer;pointer-events:auto;background:var(--accent);color:var(--accent-ink)}
+
+/* rodapé técnico */
+.foot{padding:30px 20px 40px;text-align:center;font-family:var(--font-mono);
+  font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+.foot .ver{color:var(--muted)}
+
+/* entrada animada — cortina blueprint */
+#intro{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;
+  align-items:center;justify-content:center;
+  transition:opacity .55s ease,visibility .55s,background-color .8s ease}
+#intro.zoom{background:transparent;pointer-events:none}
+#intro.off{opacity:0;visibility:hidden}
+#intro svg{width:120px;will-change:transform;
+  transition:transform .95s cubic-bezier(.6,.05,.15,1)}
+#intro .q84{stroke-dasharray:336;stroke-dashoffset:336}
+#intro.tracar .q84{animation:draw 1s cubic-bezier(.6,0,.2,1) forwards}
+#intro.tracar .q84:nth-child(2){animation-delay:.18s}
+#intro.tracar .q84:nth-child(3){animation-delay:.36s}
+#intro text{opacity:0}
+#intro.tracar text{opacity:1;transition:opacity .5s ease .55s}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* ---------- pranchas (imagens estáticas com caneta) ---------- */
+.pran-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-top:16px}
+.pran-card{cursor:pointer;padding:10px;transition:transform .25s,border-color .25s}
+.pran-card:hover{transform:translateY(-3px);border-color:var(--muted)}
+.pran-card img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:9px;
+  border:1px solid var(--line-soft);display:block}
+.pran-card .t{font-size:14.5px;font-weight:500;margin:10px 2px 2px}
+.pran-card .s{font-family:var(--font-mono);font-size:10px;color:var(--faint);
+  letter-spacing:.1em;margin:0 2px;text-transform:uppercase}
+.pran-card .s .mark{color:var(--accent)}
+
+/* anotador de ecrã inteiro */
+.anot{position:fixed;inset:0;z-index:95;background:rgba(6,6,5,.96);
+  display:none;flex-direction:column}
+.anot.on{display:flex}
+.anot-top{display:flex;align-items:center;gap:12px;padding:12px 18px;
+  border-bottom:1px solid var(--line)}
+.anot-top .t{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.anot-top .s{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--faint)}
+.anot-stage{flex:1;position:relative;overflow:hidden}
+.anot-stage img{position:absolute;user-select:none;pointer-events:none;
+  border-radius:6px;box-shadow:var(--shadow)}
+.anot-stage canvas{position:absolute;touch-action:none;cursor:crosshair;border-radius:6px}
+.anot-bar{display:flex;align-items:center;justify-content:center;gap:12px;
+  flex-wrap:wrap;padding:14px 18px;border-top:1px solid var(--line)}
+.dot-cor{width:28px;height:28px;border-radius:50%;border:2px solid transparent;
+  padding:0;transition:transform .2s}
+.dot-cor.on{border-color:var(--ink);transform:scale(1.12)}
+.anot-bar .sep{width:1px;height:22px;background:var(--line)}
+#anot-pins{position:absolute;pointer-events:none}
+.anot-pin{position:absolute;width:24px;height:24px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:11px;font-weight:500;
+  transform:translate(-50%,-50%);cursor:pointer;pointer-events:auto;
+  border:1.5px solid;box-shadow:0 4px 14px rgba(0,0,0,.45);
+  transition:transform .2s ease}
+.anot-pin:hover{transform:translate(-50%,-50%) scale(1.18)}
+.anot-pin.cliente{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.anot-pin.tkd{background:rgba(11,11,10,.85);color:var(--ink);border-color:var(--ink)}
+.anot-modo{display:flex;gap:6px;margin-right:4px}
+
+/* pastilha "novo" nas abas do cliente */
+.tab.novo::after{content:"";display:inline-block;width:6px;height:6px;
+  border-radius:50%;background:var(--accent);margin-left:7px;vertical-align:middle;
+  box-shadow:0 0 8px rgba(200,155,90,.7)}
+
+/* resumo de actividade */
+.cl-resumo{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--accent);margin-top:14px;line-height:1.9}
+.cl-resumo:empty{display:none}
+
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== cortina de entrada (blueprint desenha o logo) ===== -->
+<div id="intro" aria-hidden="true">
+  <svg viewBox="0 0 100 280" fill="none" stroke="#EDEDE6" stroke-width="2">
+    <rect class="q84" x="8" y="8"   width="84" height="84" stroke-dasharray="336" stroke-dashoffset="336"/>
+    <rect class="q84" x="8" y="92"  width="84" height="84" stroke-dasharray="336" stroke-dashoffset="336"/>
+    <rect class="q84" x="8" y="176" width="84" height="84" stroke-dasharray="336" stroke-dashoffset="336"/>
+    <text x="50" y="60"  text-anchor="middle" fill="#EDEDE6" stroke="none" font-family="IBM Plex Mono,monospace" font-size="30">T</text>
+    <text x="50" y="144" text-anchor="middle" fill="#EDEDE6" stroke="none" font-family="IBM Plex Mono,monospace" font-size="30">K</text>
+    <text x="50" y="228" text-anchor="middle" fill="#EDEDE6" stroke="none" font-family="IBM Plex Mono,monospace" font-size="30">D</text>
+  </svg>
+</div>
+
+<!-- ============================================================
+     PORTÃO — o cliente insere a senha do seu projecto
+     ============================================================ -->
+<section id="view-gate" class="view">
+  <div class="gate-card">
+    <div class="tkd-logo" aria-label="TKD — The Koncept Design">
+      <div class="q">T</div><div class="q">K</div><div class="q">D</div>
+    </div>
+    <div class="gate-title">TKD <b>VIEW</b></div>
+    <div class="gate-sub">Visualização de Projectos</div>
+    <form class="gate-form" id="gate-form" autocomplete="off">
+      <input id="gate-pass" type="password" inputmode="text" placeholder="SENHA DO PROJECTO"
+             aria-label="Senha do projecto" autocapitalize="characters">
+      <div class="gate-err" id="gate-err" role="alert"></div>
+      <button class="btn accent" type="submit" style="width:100%;padding:14px">Entrar no projecto</button>
+    </form>
+    <button class="gate-admin" id="gate-admin-btn" type="button">Acesso TKD · Administração</button>
+    <button class="gate-admin" id="gate-som-btn" type="button" style="display:block;margin:12px auto 0">Som · ligado</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     ADMINISTRAÇÃO — lista de projectos
+     ============================================================ -->
+<section id="view-admin" class="view">
+  <header class="topbar">
+    <div class="tkd-logo sm"><div class="q">T</div><div class="q">K</div><div class="q">D</div></div>
+    <div class="grow">
+      <h1>Administração</h1>
+      <div class="sub" id="admin-sub">Projectos</div>
+    </div>
+    <span class="sync-dot" id="sync-dot" title="Estado da sincronização"></span>
+    <button class="icon-btn" id="btn-sair-admin" title="Sair">✕</button>
+  </header>
+  <div class="wrap">
+    <div style="display:flex;align-items:center;gap:14px;padding-top:26px;flex-wrap:wrap">
+      <h2 style="flex:1;font-weight:300;font-size:22px">Os seus <b style="font-weight:600">projectos</b></h2>
+      <button class="btn accent" id="btn-novo-proj">+ Novo projecto</button>
+    </div>
+    <div class="admin-grid" id="admin-grid"></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     ADMINISTRAÇÃO — editor de um projecto
+     ============================================================ -->
+<section id="view-editor" class="view">
+  <header class="topbar">
+    <button class="icon-btn" id="btn-voltar-admin" title="Voltar">←</button>
+    <div class="grow">
+      <h1 id="ed-nome">Projecto</h1>
+      <div class="sub" id="ed-cli"></div>
+    </div>
+    <span class="sync-dot" id="sync-dot-2"></span>
+    <button class="btn mini ghost" id="btn-prever">Pré-visualizar</button>
+  </header>
+  <div class="wrap">
+    <div class="ed-tabs" role="tablist">
+      <button class="tab on" data-pane="ed-geral">Geral</button>
+      <button class="tab" data-pane="ed-cenas">Tour 360º <span class="n" id="n-cenas"></span></button>
+      <button class="tab" data-pane="ed-pran">Pranchas <span class="n" id="n-pran"></span></button>
+      <button class="tab" data-pane="ed-revs">Revisões <span class="n" id="n-revs"></span></button>
+      <button class="tab" data-pane="ed-decs">Decisões <span class="n" id="n-decs"></span></button>
+      <button class="tab" data-pane="ed-msgs">Mensagens <span class="n" id="n-msgs"></span></button>
+    </div>
+
+    <!-- GERAL -->
+    <div class="pane on" id="ed-geral">
+      <div class="card"><span class="corner tl"></span><span class="corner br"></span>
+        <div class="row">
+          <div><label>Nome do projecto</label><input id="f-nome" placeholder="Ex.: Residência Alvalade"></div>
+          <div><label>Cliente</label><input id="f-cli" placeholder="Nome do cliente"></div>
+        </div>
+        <div class="row">
+          <div><label>Estado</label>
+            <select id="f-estado">
+              <option value="curso">Em curso</option>
+              <option value="decisao">Aguarda decisão</option>
+              <option value="aprovado">Aprovado</option>
+            </select>
+          </div>
+          <div><label>Imagem de capa (URL)</label><input id="f-capa" placeholder="https://…">
+            <div style="margin-top:8px"><button type="button" class="btn mini ghost" id="f-cup-btn">⭱ Carregar do aparelho</button>
+            <input type="file" id="f-cup-file" accept="image/*" hidden></div></div>
+        </div>
+        <label>Nota de boas-vindas ao cliente</label>
+        <textarea id="f-nota" placeholder="Mensagem breve que o cliente vê ao entrar."></textarea>
+        <div class="acts" style="display:flex;justify-content:flex-end;margin-top:18px">
+          <button class="btn" id="btn-guardar-geral">Guardar alterações</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:18px"><span class="corner tl"></span><span class="corner br"></span>
+        <label style="margin-top:0">Acesso do cliente</label>
+        <div class="share-box">
+          <span><span class="k">senha</span><br><span id="ed-senha">—</span></span>
+          <span style="flex:1;min-width:180px"><span class="k">link</span><br><span id="ed-link" style="word-break:break-all"></span></span>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+          <button class="btn mini ghost" id="btn-copiar-acesso">Copiar convite</button>
+          <button class="btn mini ghost" id="btn-wa">Enviar por WhatsApp</button>
+          <button class="btn mini ghost" id="btn-nova-senha">Gerar nova senha</button>
+          <button class="btn mini danger" id="btn-apagar-proj" style="margin-left:auto">Apagar projecto</button>
+        </div>
+        <p class="hint">O convite copia o link e a senha, prontos a enviar por WhatsApp ou e-mail. Cada cliente só vê o projecto cuja senha inseriu.</p>
+      </div>
+    </div>
+
+    <!-- CENAS 360 -->
+    <div class="pane" id="ed-cenas">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <p class="hint" style="flex:1;min-width:220px;margin:0">Imagens 360º equirectangulares (proporção 2:1), alojadas num link directo com CORS aberto — ex.: GitHub, Firebase Storage ou imgbb.</p>
+        <button class="btn mini accent" id="btn-nova-cena">+ Adicionar cena</button>
+      </div>
+      <div class="list" id="lista-cenas"></div>
+
+      <div id="hs-editor" style="display:none;margin-top:26px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <div class="grow" style="flex:1">
+            <div style="font-weight:500" id="hs-cena-nome"></div>
+            <div class="hint" id="hs-instrucao">Toque em «Colocar hotspot» e depois clique no ponto desejado da imagem.</div>
+          </div>
+          <button class="btn mini accent" id="btn-colocar-hs">Colocar hotspot</button>
+          <button class="btn mini ghost" id="btn-fechar-hs">Fechar editor</button>
+        </div>
+        <div class="pano-shell">
+          <div id="pano-admin"></div>
+          <div class="pano-cota" id="pano-admin-cota">Editor de hotspots</div>
+        </div>
+        <div class="list" id="lista-hs"></div>
+      </div>
+    </div>
+
+    <!-- PRANCHAS -->
+    <div class="pane" id="ed-pran">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <p class="hint" style="flex:1;min-width:220px;margin:0">Imagens estáticas (plantas, alçados, renders) sobre as quais o cliente pode desenhar com a caneta virtual. As marcações chegam-lhe em tempo real — e também pode responder a desenhar.</p>
+        <button class="btn mini accent" id="btn-nova-pran">+ Adicionar prancha</button>
+      </div>
+      <div class="list" id="lista-pran"></div>
+    </div>
+
+    <!-- REVISÕES -->
+    <div class="pane" id="ed-revs">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button class="btn mini accent" id="btn-nova-rev">+ Nova revisão</button>
+      </div>
+      <div class="rev-line" id="ed-lista-revs"></div>
+    </div>
+
+    <!-- DECISÕES -->
+    <div class="pane" id="ed-decs">
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:8px">
+        <button class="btn mini ghost" id="btn-acta">Exportar acta (PDF)</button>
+        <button class="btn mini accent" id="btn-nova-dec">+ Pedir decisão</button>
+      </div>
+      <div id="ed-lista-decs"></div>
+    </div>
+
+    <!-- MENSAGENS -->
+    <div class="pane" id="ed-msgs">
+      <div class="msgs" id="ed-msgs-lista"></div>
+      <form class="msg-form" id="ed-msg-form">
+        <input id="ed-msg-input" placeholder="Responder ao cliente…">
+        <button class="btn" type="submit">Enviar</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     VISTA DO CLIENTE
+     ============================================================ -->
+<section id="view-client" class="view">
+  <header class="topbar">
+    <div class="tkd-logo sm"><div class="q">T</div><div class="q">K</div><div class="q">D</div></div>
+    <div class="grow">
+      <h1 id="cl-topo-nome">Projecto</h1>
+      <div class="sub">The Koncept Design</div>
+    </div>
+    <span class="sync-dot" id="sync-dot-3"></span>
+    <button class="icon-btn" id="btn-sair-cli" title="Sair">✕</button>
+  </header>
+
+  <div class="wrap">
+    <div class="cl-hero">
+      <div class="eyebrow">Projecto exclusivo</div>
+      <h2 id="cl-nome"></h2>
+      <div class="cli" id="cl-cli"></div>
+      <div class="head-row">
+        <span class="tag" id="cl-estado"></span>
+        <span class="hint" id="cl-atual" style="margin:0"></span>
+      </div>
+      <div class="cl-resumo" id="cl-resumo"></div>
+      <p id="cl-nota" class="hint" style="max-width:640px;font-size:14px;margin-top:14px"></p>
+    </div>
+
+    <div class="cl-tabs" role="tablist">
+      <button class="tab on" data-pane="cl-tour">Tour 360º</button>
+      <button class="tab" data-pane="cl-pran">Pranchas <span class="n" id="cl-n-pran"></span></button>
+      <button class="tab" data-pane="cl-revs">Revisões <span class="n" id="cl-n-revs"></span></button>
+      <button class="tab" data-pane="cl-decs">Decisões <span class="n" id="cl-n-decs"></span></button>
+      <button class="tab" data-pane="cl-msgs">Mensagens <span class="n" id="cl-n-msgs"></span></button>
+    </div>
+
+    <div class="pane on" id="cl-tour">
+      <div class="pano-shell">
+        <div id="pano"></div>
+        <div class="pano-cota" id="pano-cota">Arraste para explorar · toque nos pontos para navegar</div>
+      </div>
+      <div class="scene-chips" id="cl-cenas"></div>
+    </div>
+
+    <div class="pane" id="cl-pran">
+      <p class="hint" style="margin-bottom:4px">Toque numa prancha para a abrir e marcar as suas notas com a caneta virtual — a TKD recebe-as de imediato.</p>
+      <div class="pran-grid" id="cl-lista-pran"></div>
+    </div>
+
+    <div class="pane" id="cl-revs">
+      <div class="rev-line" id="cl-lista-revs"></div>
+    </div>
+
+    <div class="pane" id="cl-decs">
+      <div id="cl-lista-decs"></div>
+    </div>
+
+    <div class="pane" id="cl-msgs">
+      <div class="msgs" id="cl-msgs-lista"></div>
+      <form class="msg-form" id="cl-msg-form">
+        <input id="cl-msg-input" placeholder="Escreva a sua mensagem…">
+        <button class="btn" type="submit">Enviar</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="foot">TKD · The Koncept Design — <span class="ver" id="ver-cli"></span></div>
+</section>
+
+<!-- ===== anotador (caneta virtual sobre pranchas) ===== -->
+<div class="anot" id="anot" role="dialog" aria-modal="true">
+  <div class="anot-top">
+    <div class="tkd-logo sm"><div class="q">T</div><div class="q">K</div><div class="q">D</div></div>
+    <div style="flex:1;min-width:0">
+      <div class="t" id="anot-titulo">Prancha</div>
+      <div class="s" id="anot-sub">Desenhe sobre a imagem · as marcações sincronizam ao levantar a caneta</div>
+    </div>
+    <button class="icon-btn" id="anot-fechar" title="Fechar">✕</button>
+  </div>
+  <div class="anot-stage" id="anot-stage">
+    <img id="anot-img" alt="" draggable="false">
+    <canvas id="anot-cv"></canvas>
+    <div id="anot-pins"></div>
+  </div>
+  <div class="anot-bar">
+    <span class="anot-modo">
+      <button class="btn mini" id="anot-m-caneta">✎ Caneta</button>
+      <button class="btn mini ghost" id="anot-m-nota">◉ Nota</button>
+    </span>
+    <span class="sep"></span>
+    <button class="dot-cor on" data-cor="#C89B5A" style="background:#C89B5A" title="Âmbar"></button>
+    <button class="dot-cor" data-cor="#EDEDE6" style="background:#EDEDE6" title="Branco"></button>
+    <button class="dot-cor" data-cor="#C96A5A" style="background:#C96A5A" title="Vermelho"></button>
+    <span class="sep"></span>
+    <button class="btn mini ghost" id="anot-undo">↶ Desfazer</button>
+    <button class="btn mini ghost" id="anot-limpar">Apagar as minhas marcações</button>
+  </div>
+</div>
+
+<!-- ===== modal genérico ===== -->
+<div class="modal-bg" id="modal-bg" role="dialog" aria-modal="true">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<!-- ===== lightbox ===== -->
+<div class="lb" id="lb"><img id="lb-img" alt=""></div>
+
+<!-- ===== toast ===== -->
+<div id="toast" role="status"></div>
+
+<script>
+/* ============================================================
+   TKD VIEW — núcleo
+   Blueprint herdado do TKD HUB:
+   · APP_VERSION ↔ CACHE_VERSION (sw.js) na mesma sequência
+   · sincronização Firebase Realtime Database com guarda de eco
+     (deviceId) e escritas parciais por caminho (update), nunca
+     set() cego que apague dados de outros dispositivos
+   · modo local (localStorage) quando o Firebase não está definido
+   ============================================================ */
+
+/* ============================================================
+   VERSÃO DA APP
+   Suba este número a cada publicação, em sequência
+   (1.0.0 → 1.0.1 → …) e mantenha o CACHE_VERSION em sw.js igual
+   (ex.: app "1.0.1" ↔ sw "tkd-view-v1.0.1"). Ao refrescar o link,
+   o número no rodapé confirma se a nova versão foi aplicada.
+   ============================================================ */
+var APP_VERSION = "1.0.6";
+
+/* PIN de administração — MUDE antes de publicar. */
+var ADMIN_PIN = "8484";
+
+/* ============================================================
+   FIREBASE — cole aqui o mesmo objecto de configuração usado no
+   TKD HUB (apiKey, authDomain, databaseURL, projectId, …).
+   Com null, a app funciona em modo local (só neste aparelho).
+   ============================================================ */
+var FIREBASE_CONFIG = null;
+/* Exemplo:
+var FIREBASE_CONFIG = {
+  apiKey: "…", authDomain: "….firebaseapp.com",
+  databaseURL: "https://….firebasedatabase.app",
+  projectId: "…", appId: "…"
+};
+*/
+var FB_RAIZ = "tkdview";   /* nó raiz — separado dos dados do HUB */
+
+/* ---------------- utilidades ---------------- */
+function $(id){return document.getElementById(id)}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function fmtData(ts){
+  if(!ts) return "";
+  var d=new Date(ts);
+  return d.toLocaleDateString("pt-PT",{day:"2-digit",month:"short",year:"numeric"})
+       +" · "+d.toLocaleTimeString("pt-PT",{hour:"2-digit",minute:"2-digit"});
+}
+function gerarSenha(){
+  var a="ABCDEFGHJKMNPQRSTUVWXYZ23456789",s="";
+  var arr=new Uint32Array(6);(window.crypto||{}).getRandomValues?crypto.getRandomValues(arr):arr.forEach(function(_,i){arr[i]=Math.random()*1e9});
+  for(var i=0;i<6;i++)s+=a[arr[i]%a.length];
+  return s;
+}
+function hashSenha(txt){
+  txt=String(txt||"").trim().toUpperCase();
+  if(window.crypto && crypto.subtle){
+    return crypto.subtle.digest("SHA-256",new TextEncoder().encode("tkd·"+txt))
+      .then(function(buf){
+        return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,"0")}).join("");
+      });
+  }
+  /* fallback (contextos sem HTTPS) */
+  var h=5381;for(var i=0;i<txt.length;i++)h=((h<<5)+h+txt.charCodeAt(i))>>>0;
+  return Promise.resolve("djb2-"+h.toString(16));
+}
+var toastT=null;
+function toast(msg,opts){
+  opts=opts||{};var t=$("toast");
+  t.textContent=msg;t.className=opts.update?"on update":"on";
+  t.onclick=opts.onclick||null;
+  clearTimeout(toastT);
+  if(!opts.fixo) toastT=setTimeout(function(){t.className=""},opts.ms||3200);
+}
+function copiar(txt,ok){
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject())
+    .then(function(){toast(ok||"Copiado.")})
+    .catch(function(){
+      var ta=document.createElement("textarea");ta.value=txt;document.body.appendChild(ta);
+      ta.select();try{document.execCommand("copy");toast(ok||"Copiado.")}catch(e){toast("Não foi possível copiar.")}
+      ta.remove();
+    });
+}
+
+/* ---------------- modal genérico ---------------- */
+function modal(html){
+  $("modal-box").innerHTML=html;
+  $("modal-bg").classList.add("on");
+}
+function fecharModal(){$("modal-bg").classList.remove("on")}
+$("modal-bg") && document.addEventListener("click",function(e){
+  if(e.target===$("modal-bg"))fecharModal();
+});
+document.addEventListener("keydown",function(e){if(e.key==="Escape"){fecharModal();$("lb").classList.remove("on");if(window.anot&&anot.aberta)fecharAnotador()}});
+
+/* lightbox */
+function abrirLb(src){$("lb-img").src=src;$("lb").classList.add("on")}
+$("lb").addEventListener("click",function(){$("lb").classList.remove("on")});
+
+/* ---------------- armazenamento ---------------- */
+var DB={projetos:{}};
+var LS_CHAVE="tkdview_projetos_v1";
+function carregarLocal(){
+  try{DB.projetos=JSON.parse(localStorage.getItem(LS_CHAVE))||{}}catch(e){DB.projetos={}}
+}
+function guardarLocal(){
+  try{localStorage.setItem(LS_CHAVE,JSON.stringify(DB.projetos))}catch(e){}
+}
+
+/* ---------------- Firebase (blueprint TKD HUB) ---------------- */
+var fb={ligado:false,ref:null,deviceId:null,ouvindoTudo:false,ouvindoProj:null};
+(function(){ /* deviceId persistente para a guarda de eco */
+  var d=localStorage.getItem("tkd_device_id");
+  if(!d){d=uid();localStorage.setItem("tkd_device_id",d)}
+  fb.deviceId=d;
+})();
+function pontosSync(estado){
+  ["sync-dot","sync-dot-2","sync-dot-3"].forEach(function(id){
+    var el=$(id);if(!el)return;
+    el.className="sync-dot"+(estado==="on"?" on":estado==="local"?" local":"");
+    el.title=estado==="on"?"Sincronizado (Firebase)":estado==="local"?"Modo local — só neste aparelho":"A ligar…";
+  });
+}
+function iniciarFirebase(){
+  return new Promise(function(res){
+    if(!FIREBASE_CONFIG){pontosSync("local");return res(false)}
+    function carregar(src){return new Promise(function(r,j){
+      var s=document.createElement("script");s.src=src;s.onload=r;s.onerror=j;document.head.appendChild(s);
+    })}
+    carregar("https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js")
+      .then(function(){return carregar("https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js")})
+      .then(function(){return carregar("https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js").catch(function(){})})
+      .then(function(){
+        firebase.initializeApp(FIREBASE_CONFIG);
+        fb.ref=firebase.database().ref(FB_RAIZ);
+        firebase.database().ref(".info/connected").on("value",function(s){
+          fb.ligado=!!s.val();pontosSync(fb.ligado?"on":"");
+        });
+        res(true);
+      })
+      .catch(function(){pontosSync("local");toast("Firebase indisponível — modo local.");res(false)});
+  });
+}
+/* escuta total (administração) */
+function ouvirTudo(){
+  if(!fb.ref||fb.ouvindoTudo)return;
+  fb.ouvindoTudo=true;
+  fb.ref.child("projetos").on("value",function(snap){
+    var val=snap.val()||{};
+    if(JSON.stringify(val)===JSON.stringify(DB.projetos))return; /* nada mudou */
+    DB.projetos=val;guardarLocal();
+    if(vistaAtual==="admin")renderAdminGrid();
+    if(vistaAtual==="editor"&&projAtivo){
+      projAtivo=DB.projetos[projAtivo.id]||projAtivo;
+      renderEditorSuave();
+    }
+  });
+}
+/* escuta de um projecto (cliente) */
+function ouvirProjeto(id){
+  if(!fb.ref)return;
+  if(fb.ouvindoProj)fb.ref.child("projetos/"+fb.ouvindoProj).off();
+  fb.ouvindoProj=id;
+  fb.ref.child("projetos/"+id).on("value",function(snap){
+    var p=snap.val();
+    if(!p)return;
+    var antes=JSON.stringify(DB.projetos[id]||null);
+    DB.projetos[id]=p;guardarLocal();
+    if(vistaAtual==="client"&&antes!==JSON.stringify(p))renderClient(p,true);
+  });
+}
+/* escrita completa de um projecto (só a administração usa) */
+function salvarProjeto(p,silencioso){
+  p.atualizadoEm=Date.now();
+  p._origem=fb.deviceId;
+  DB.projetos[p.id]=p;guardarLocal();
+  if(fb.ref){
+    fb.ref.child("projetos/"+p.id).set(p);
+    if(p.senhaHash)fb.ref.child("indice/"+p.senhaHash).set(p.id);
+  }
+  if(!silencioso)toast("Guardado.");
+}
+function apagarProjeto(p){
+  delete DB.projetos[p.id];guardarLocal();
+  if(fb.ref){
+    fb.ref.child("projetos/"+p.id).remove();
+    if(p.senhaHash)fb.ref.child("indice/"+p.senhaHash).remove();
+  }
+}
+/* escrita parcial por caminho — nunca apaga o resto (blueprint) */
+function atualizarCaminho(projId,caminho,valor){
+  var p=DB.projetos[projId];
+  if(p){ /* aplicar localmente */
+    var partes=caminho.split("/"),o=p;
+    for(var i=0;i<partes.length-1;i++){o[partes[i]]=o[partes[i]]||{};o=o[partes[i]]}
+    if(valor===null||valor===undefined)delete o[partes[partes.length-1]];
+    else o[partes[partes.length-1]]=valor;
+    p.atualizadoEm=Date.now();guardarLocal();
+  }
+  if(fb.ref){
+    var upd={};upd["projetos/"+projId+"/"+caminho]=valor;
+    upd["projetos/"+projId+"/atualizadoEm"]=Date.now();
+    fb.ref.update(upd);
+  }
+}
+
+
+/* ============================================================
+   SOM DA INTRO — melodia curta que acompanha o desenho do logo
+   (três traços + resolução), no espírito da entrada do TKD HUB.
+   O browser só permite áudio após um gesto do utilizador, por
+   isso a melodia toca de forma garantida ao entrar (senha/PIN)
+   e, no arranque, apenas se houver um toque durante a cortina.
+   ============================================================ */
+var somOn = localStorage.getItem("tkd_som") !== "0";
+function actualizarBtnSom(){
+  var b=$("gate-som-btn");if(!b)return;
+  b.textContent="Som · "+(somOn?"ligado":"desligado");
+  b.style.opacity=somOn?"":".55";
+}
+$("gate-som-btn").addEventListener("click",function(){
+  somOn=!somOn;
+  localStorage.setItem("tkd_som",somOn?"1":"0");
+  actualizarBtnSom();
+  if(somOn)tocarIntro();
+});
+actualizarBtnSom();
+var _actx=null;
+/* tocarIntro(aoArrancar): o callback dispara no instante exacto em
+   que as notas ficam agendadas — é ele que dá partida ao traço,
+   garantindo som e desenho na mesma linha de tempo. */
+function tocarIntro(aoArrancar){
+  if(!somOn){if(aoArrancar)aoArrancar();return}
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC){if(aoArrancar)aoArrancar();return}
+    if(!_actx)_actx=new AC();
+    var ctx=_actx;
+    if(ctx.state==="suspended"){
+      ctx.resume().then(function(){agendar()})
+        .catch(function(){if(aoArrancar)aoArrancar()});
+      return;
+    }
+    agendar();
+  }catch(e){if(aoArrancar)aoArrancar()}
+  function agendar(){
+    var ctx=_actx;
+    var t0=ctx.currentTime+0.03;
+    var master=ctx.createGain();master.gain.value=0.9;
+    var lp=ctx.createBiquadFilter();lp.type="lowpass";lp.frequency.value=2600;
+    master.connect(lp);lp.connect(ctx.destination);
+    function nota(f,t,dur,vol,tipo){
+      var o=ctx.createOscillator(),g=ctx.createGain();
+      o.type=tipo||"triangle";o.frequency.value=f;
+      g.gain.setValueAtTime(0,t0+t);
+      g.gain.linearRampToValueAtTime(vol,t0+t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+t+dur);
+      o.connect(g);g.connect(master);
+      o.start(t0+t);o.stop(t0+t+dur+0.05);
+    }
+    /* um tom por quadrado do logo, alinhado com o traço (0 / .18 / .36s) */
+    nota(392.00,0.00,0.55,0.15);   /* G4 — T */
+    nota(523.25,0.18,0.55,0.15);   /* C5 — K */
+    nota(659.25,0.36,0.65,0.15);   /* E5 — D */
+    /* resolução suave */
+    nota(523.25,0.88,1.5,0.09,"sine");
+    nota(783.99,0.88,1.5,0.06,"sine");
+    /* textura de lápis a riscar (ruído filtrado, muito discreto) */
+    var dur=0.85,buf=ctx.createBuffer(1,Math.floor(ctx.sampleRate*dur),ctx.sampleRate),
+        d=buf.getChannelData(0);
+    for(var i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+    var src=ctx.createBufferSource();src.buffer=buf;
+    var bp=ctx.createBiquadFilter();bp.type="bandpass";bp.Q.value=1.2;
+    bp.frequency.setValueAtTime(900,t0);
+    bp.frequency.linearRampToValueAtTime(2200,t0+dur);
+    var ng=ctx.createGain();ng.gain.setValueAtTime(0.045,t0);
+    ng.gain.linearRampToValueAtTime(0,t0+dur);
+    src.connect(bp);bp.connect(ng);ng.connect(master);src.start(t0);
+    if(aoArrancar)aoArrancar();
+  }
+}
+/* ============================================================
+   ATERRAGEM CONTÍNUA — o logo desenhado faz zoom out e pousa
+   exactamente sobre o logo da vista seguinte (FLIP), enquanto o
+   fundo da cortina se dissolve e o conteúdo entra em cascata.
+   Sem cortes: no fim há apenas um crossfade de ~0.5s entre o SVG
+   e o logo real, já perfeitamente sobrepostos.
+   ============================================================ */
+function introAterrar(alvo,revelar){
+  var intro=$("intro"),svg=intro.querySelector("svg");
+  var reduzido=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(!alvo||!svg||reduzido){
+    intro.classList.add("off");
+    if(revelar)revelar(true);
+    return;
+  }
+  requestAnimationFrame(function(){
+    var de=svg.getBoundingClientRect(),para=alvo.getBoundingClientRect();
+    if(!de.width||!para.width){intro.classList.add("off");if(revelar)revelar(true);return}
+    /* o desenho ocupa 84/100 da largura e centra-se a 134/280 da altura do viewBox */
+    var cx=de.left+de.width/2,
+        cy=de.top+de.height*(134/280),
+        escala=para.width/(de.width*0.84),
+        tx=(para.left+para.width/2)-cx,
+        ty=(para.top+para.height/2)-cy;
+    alvo.style.visibility="hidden";
+    intro.classList.add("zoom");            /* fundo dissolve-se, grelha aparece */
+    svg.style.transform="translate("+tx+"px,"+ty+"px) scale("+escala+")";
+    if(revelar)revelar();
+    var feito=false;
+    function fim(){
+      if(feito)return;feito=true;
+      alvo.style.visibility="";
+      intro.classList.add("off");           /* crossfade final SVG → logo real */
+      setTimeout(function(){
+        intro.classList.remove("zoom");svg.style.transform="";
+      },600);
+    }
+    svg.addEventListener("transitionend",fim,{once:true});
+    setTimeout(fim,1150);                   /* segurança */
+  });
+}
+/* conteúdo do portão entra em cascata, sincronizado com a aterragem */
+function revelarGate(){
+  var els=$("view-gate").querySelectorAll(".gate-card > *");
+  els.forEach(function(e,i){
+    if(e.classList.contains("tkd-logo"))return;
+    e.style.transition="none";
+    e.style.opacity="0";e.style.transform="translateY(16px)";
+    requestAnimationFrame(function(){requestAnimationFrame(function(){
+      e.style.transition="opacity .8s ease "+(0.15+i*0.09)+"s,transform .8s cubic-bezier(.3,1,.4,1) "+(0.15+i*0.09)+"s";
+      e.style.opacity="";e.style.transform="";
+    })});
+  });
+}
+/* ============================================================
+   TRAÇO COM RELÓGIO PRÓPRIO
+   iniciarTraco(comSom): clona o SVG (reinicia a animação) e só
+   acrescenta a classe .tracar quando o som dá a ordem de partida.
+   esperarTraco() resolve quando o traço em curso termina — se o
+   traço for reiniciado (ex.: toque durante a cortina), a espera
+   prolonga-se sozinha. Assim, nada aterra a meio do desenho.
+   ============================================================ */
+var introFim=0;
+function iniciarTraco(comSom){
+  var i=$("intro"),svg=i.querySelector("svg");
+  if(svg){var novo=svg.cloneNode(true);novo.style.transform="";svg.replaceWith(novo)}
+  i.classList.remove("tracar");
+  function partir(){
+    introFim=Date.now()+1300;
+    void i.offsetWidth;              /* forçar reflow: a animação recomeça do zero */
+    i.classList.add("tracar");
+  }
+  if(comSom&&somOn)tocarIntro(partir);
+  else partir();
+}
+function esperarTraco(){
+  return new Promise(function(r){
+    (function chk(){
+      var falta=introFim-Date.now();
+      if(falta<=0)r();else setTimeout(chk,Math.min(falta,120));
+    })();
+  });
+}
+/* repetir a cortina completa (logins) e aterrar no alvo */
+function correrIntro(alvoFn,revelar){
+  var i=$("intro");
+  i.classList.remove("off","zoom");
+  iniciarTraco(true);                /* som e traço partem juntos */
+  esperarTraco().then(function(){
+    var alvo=alvoFn?alvoFn():null;
+    if(alvo)introAterrar(alvo,revelar);
+    else i.classList.add("off");
+  });
+}
+
+
+/* ============================================================
+   UPLOAD DIRECTO — Firebase Storage
+   As imagens são redimensionadas e comprimidas no aparelho antes
+   de subir (JPEG q0.85), e o URL final é colocado no campo.
+   Requer "storageBucket" no FIREBASE_CONFIG e regras de Storage.
+   ============================================================ */
+function redimensionarImg(file,maxW){
+  return new Promise(function(res,rej){
+    var img=new Image();
+    img.onload=function(){
+      var f=Math.min(1,maxW/img.width);
+      var w=Math.round(img.width*f),h=Math.round(img.height*f);
+      var cv=document.createElement("canvas");cv.width=w;cv.height=h;
+      cv.getContext("2d").drawImage(img,0,0,w,h);
+      cv.toBlob(function(b){URL.revokeObjectURL(img.src);b?res(b):rej(new Error("blob"))},"image/jpeg",0.85);
+    };
+    img.onerror=function(){URL.revokeObjectURL(img.src);rej(new Error("img"))};
+    img.src=URL.createObjectURL(file);
+  });
+}
+function uploadImagem(file,opts){
+  opts=opts||{};
+  return new Promise(function(res,rej){
+    if(!FIREBASE_CONFIG||!window.firebase||!firebase.storage){rej(new Error("sem-storage"));return}
+    redimensionarImg(file,opts.maxW||2000).then(function(blob){
+      var caminho=FB_RAIZ+"/"+(opts.pasta||"geral")+"/"+uid()+".jpg";
+      var ref=firebase.storage().ref().child(caminho);
+      var tarefa=ref.put(blob,{contentType:"image/jpeg",cacheControl:"public,max-age=31536000"});
+      tarefa.on("state_changed",function(st){
+        var pct=st.totalBytes?Math.round(st.bytesTransferred/st.totalBytes*100):0;
+        toast("A carregar… "+pct+"%",{fixo:true});
+      },function(e){toast("Falha no carregamento.");rej(e)},function(){
+        ref.getDownloadURL().then(function(u){toast("Imagem carregada.");res(u)}).catch(rej);
+      });
+    }).catch(rej);
+  });
+}
+/* HTML do botão de upload para usar dentro dos modais */
+function htmlUpload(pref,multiplo){
+  return '<div style="margin-top:8px"><button type="button" class="btn mini ghost" id="'+pref+'-btn">⭱ Carregar do aparelho</button>'
+    +'<input type="file" id="'+pref+'-file" accept="image/*" '+(multiplo?'multiple ':'')+'hidden></div>';
+}
+function ligarUpload(pref,opts,aoUrl){
+  var b=$(pref+"-btn"),f=$(pref+"-file");
+  if(!b||!f)return;
+  b.onclick=function(){
+    if(!FIREBASE_CONFIG){toast("Configure o Firebase (com storageBucket) para carregar ficheiros.");return}
+    f.click();
+  };
+  f.onchange=function(){
+    var fics=Array.prototype.slice.call(f.files||[]);
+    if(!fics.length)return;
+    (function seq(i){
+      if(i>=fics.length)return;
+      uploadImagem(fics[i],opts)
+        .then(function(u){aoUrl(u);seq(i+1)})
+        .catch(function(){});
+    })(0);
+    f.value="";
+  };
+}
+
+/* ============================================================
+   NAVEGAÇÃO ENTRE VISTAS
+   ============================================================ */
+var vistaAtual="gate", projAtivo=null, modoPrever=false;
+function mostrar(vista){
+  ["gate","admin","editor","client"].forEach(function(v){
+    $("view-"+v).classList.toggle("on",v===vista);
+  });
+  vistaAtual=vista;window.scrollTo(0,0);
+}
+
+/* tabs genéricas (editor e cliente) */
+document.querySelectorAll(".ed-tabs .tab,.cl-tabs .tab").forEach(function(t){
+  t.addEventListener("click",function(){
+    var barra=t.parentElement;
+    barra.querySelectorAll(".tab").forEach(function(x){x.classList.remove("on")});
+    t.classList.add("on");
+    var raiz=barra.closest("section");
+    raiz.querySelectorAll(".pane").forEach(function(p){p.classList.remove("on")});
+    $(t.dataset.pane).classList.add("on");
+    if(t.dataset.pane==="cl-tour")setTimeout(function(){if(clViewer)clViewer.resize()},60);
+    if(raiz.id==="view-client"&&projCliente&&!modoPrever){
+      vistoGravar(projCliente.id,t.dataset.pane);
+      t.classList.remove("novo");
+      aplicarNovidades(projCliente);
+    }
+  });
+});
+
+/* ============================================================
+   PORTÃO DE ENTRADA
+   ============================================================ */
+$("gate-form").addEventListener("submit",function(e){
+  e.preventDefault();
+  var senha=$("gate-pass").value.trim();
+  if(!senha)return;
+  $("gate-err").textContent="";
+  hashSenha(senha).then(function(h){
+    /* 1º: procurar online no índice; 2º: procurar localmente */
+    if(fb.ref){
+      fb.ref.child("indice/"+h).once("value").then(function(s){
+        var id=s.val();
+        if(id){
+          fb.ref.child("projetos/"+id).once("value").then(function(ps){
+            var p=ps.val();
+            if(p)entrarCliente(p,h);else falhaSenha();
+          });
+        }else procurarLocal(h);
+      }).catch(function(){procurarLocal(h)});
+    }else procurarLocal(h);
+  });
+  function procurarLocal(h){
+    var achado=null;
+    Object.keys(DB.projetos).forEach(function(k){
+      if(DB.projetos[k].senhaHash===h)achado=DB.projetos[k];
+    });
+    if(achado)entrarCliente(achado,h);else falhaSenha();
+  }
+  function falhaSenha(){
+    $("gate-err").textContent="Senha não reconhecida. Confirme com a TKD.";
+    $("gate-pass").select();
+  }
+});
+function entrarCliente(p,hash){
+  modoPrever=false;
+  correrIntro(function(){return document.querySelector("#view-client .topbar .tkd-logo")});
+  try{sessionStorage.setItem("tkd_cli",JSON.stringify({id:p.id,h:hash}))}catch(e){}
+  DB.projetos[p.id]=p;guardarLocal();
+  atualizarCaminho(p.id,"visto",Date.now());
+  ouvirProjeto(p.id);
+  renderClient(p);
+  mostrar("client");
+}
+
+/* acesso administração */
+$("gate-admin-btn").addEventListener("click",function(){
+  modal(
+    '<h3>Acesso TKD</h3><div class="sub">Área reservada à administração.</div>'
+    +'<label>PIN</label><input id="m-pin" type="password" inputmode="numeric" autocomplete="off">'
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-pin-ok">Entrar</button></div>'
+  );
+  $("m-pin").focus();
+  function tentar(){
+    if($("m-pin").value===ADMIN_PIN){
+      fecharModal();
+      try{sessionStorage.setItem("tkd_admin","1")}catch(e){}
+      correrIntro(function(){return document.querySelector("#view-admin .topbar .tkd-logo")});
+      abrirAdmin();
+    }else{toast("PIN incorrecto.");$("m-pin").select()}
+  }
+  $("m-pin-ok").onclick=tentar;
+  $("m-pin").addEventListener("keydown",function(e){if(e.key==="Enter")tentar()});
+});
+
+function sairParaGate(){
+  try{sessionStorage.removeItem("tkd_cli");sessionStorage.removeItem("tkd_admin")}catch(e){}
+  destruirViewers();
+  $("gate-pass").value="";
+  mostrar("gate");
+}
+$("btn-sair-admin").addEventListener("click",sairParaGate);
+$("btn-sair-cli").addEventListener("click",function(){
+  if(modoPrever){modoPrever=false;abrirEditor(projAtivo);return}
+  sairParaGate();
+});
+
+/* ============================================================
+   ADMINISTRAÇÃO — grelha de projectos
+   ============================================================ */
+function abrirAdmin(){
+  ouvirTudo();
+  renderAdminGrid();
+  mostrar("admin");
+}
+function renderAdminGrid(){
+  var g=$("admin-grid"),lista=Object.values(DB.projetos)
+    .sort(function(a,b){return (b.atualizadoEm||0)-(a.atualizadoEm||0)});
+  $("admin-sub").textContent=lista.length+" projecto"+(lista.length===1?"":"s")+" · v"+APP_VERSION;
+  if(!lista.length){
+    g.innerHTML='<div class="empty" style="grid-column:1/-1">Ainda não há projectos.'
+      +'<div class="cota">Toque em «+ novo projecto» para começar</div></div>';
+    return;
+  }
+  g.innerHTML=lista.map(function(p){
+    var nDecPend=Object.values(p.decisoes||{}).filter(function(d){return !d.resposta}).length;
+    return '<div class="card proj-card" data-id="'+p.id+'"><span class="corner tl"></span><span class="corner br"></span>'
+      +(p.capa?'<div class="capa" style="background-image:url(\''+esc(p.capa)+'\')"></div>':'')
+      +'<span class="tag '+esc(p.estado||"curso")+'">'+nomeEstado(p.estado)+'</span>'
+      +'<h3 style="margin-top:12px">'+esc(p.nome||"Sem nome")+'</h3>'
+      +'<div class="cli">'+esc(p.cliente||"")+'</div>'
+      +'<div class="meta"><span>'+Object.keys(p.cenas||{}).length+' cenas</span>'
+      +'<span>'+Object.keys(p.revisoes||{}).length+' rev.</span>'
+      +(nDecPend?'<span style="color:var(--warn)">'+nDecPend+' decisão pend.</span>':'')
+      +(p.visto?'<span title="Última visita do cliente">visto '+fmtData(p.visto).split(" ·")[0]+'</span>':'')
+      +'</div></div>';
+  }).join("");
+  g.querySelectorAll(".proj-card").forEach(function(c){
+    c.addEventListener("click",function(){abrirEditor(DB.projetos[c.dataset.id])});
+  });
+}
+function nomeEstado(e){return e==="aprovado"?"Aprovado":e==="decisao"?"Aguarda decisão":"Em curso"}
+
+/* novo projecto */
+$("btn-novo-proj").addEventListener("click",function(){
+  var senha=gerarSenha();
+  modal(
+    '<h3>Novo projecto</h3><div class="sub">Cada projecto tem uma senha única de acesso.</div>'
+    +'<label>Nome do projecto</label><input id="m-nome" placeholder="Ex.: Residência Alvalade">'
+    +'<label>Cliente</label><input id="m-cli" placeholder="Nome do cliente">'
+    +'<label>Senha de acesso</label><input id="m-senha" value="'+senha+'" style="font-family:var(--font-mono);letter-spacing:.2em;text-transform:uppercase">'
+    +'<p class="hint">Gerada automaticamente — pode editar. Será pedida ao cliente na entrada.</p>'
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-criar">Criar projecto</button></div>'
+  );
+  $("m-nome").focus();
+  $("m-criar").onclick=function(){
+    var nome=$("m-nome").value.trim(),cli=$("m-cli").value.trim(),
+        s=$("m-senha").value.trim().toUpperCase();
+    if(!nome||!s){toast("Indique o nome e a senha.");return}
+    hashSenha(s).then(function(h){
+      var p={id:uid(),nome:nome,cliente:cli,estado:"curso",capa:"",nota:"",
+        senha:s,senhaHash:h,criadoEm:Date.now(),atualizadoEm:Date.now(),
+        cenas:{},revisoes:{},decisoes:{},msgs:{},pranchas:{},visto:0};
+      salvarProjeto(p,true);
+      fecharModal();toast("Projecto criado.");
+      abrirEditor(p);
+    });
+  };
+});
+
+/* ============================================================
+   EDITOR DE PROJECTO
+   ============================================================ */
+$("btn-voltar-admin").addEventListener("click",function(){
+  fecharHsEditor();abrirAdmin();
+});
+$("btn-prever").addEventListener("click",function(){
+  if(!projAtivo)return;
+  modoPrever=true;
+  renderClient(projAtivo);mostrar("client");
+  toast("Pré-visualização — toque em ✕ para voltar ao editor.");
+});
+function abrirEditor(p){
+  projAtivo=p;fecharHsEditor();
+  renderEditor();
+  mostrar("editor");
+}
+function renderEditor(){
+  var p=projAtivo;if(!p)return;
+  $("ed-nome").textContent=p.nome||"Projecto";
+  $("ed-cli").textContent=(p.cliente||"")+" · v"+APP_VERSION;
+  $("f-nome").value=p.nome||"";$("f-cli").value=p.cliente||"";
+  $("f-estado").value=p.estado||"curso";$("f-capa").value=p.capa||"";
+  $("f-nota").value=p.nota||"";
+  $("ed-senha").textContent=p.senha||"—";
+  $("ed-link").textContent=linkPartilha();
+  renderEditorSuave();
+}
+/* re-render sem tocar nos campos em edição (chega via sync) */
+function renderEditorSuave(){
+  var p=projAtivo;if(!p)return;
+  $("n-cenas").textContent=Object.keys(p.cenas||{}).length||"";
+  $("n-revs").textContent=Object.keys(p.revisoes||{}).length||"";
+  var pend=Object.values(p.decisoes||{}).filter(function(d){return!d.resposta}).length;
+  $("n-decs").textContent=Object.keys(p.decisoes||{}).length?(pend?pend+"↺":Object.keys(p.decisoes).length):"";
+  $("n-msgs").textContent=Object.keys(p.msgs||{}).length||"";
+  $("n-pran").textContent=Object.keys(p.pranchas||{}).length||"";
+  renderListaCenas();renderListaPran();renderEdRevs();renderEdDecs();renderMsgs("ed");
+  anotSync();
+}
+function linkPartilha(){
+  return location.origin==="null"?location.href.split("?")[0]:location.origin+location.pathname;
+}
+$("btn-guardar-geral").addEventListener("click",function(){
+  var p=projAtivo;
+  p.nome=$("f-nome").value.trim();p.cliente=$("f-cli").value.trim();
+  p.estado=$("f-estado").value;p.capa=$("f-capa").value.trim();
+  p.nota=$("f-nota").value.trim();
+  salvarProjeto(p);renderEditor();
+});
+$("btn-copiar-acesso").addEventListener("click",function(){
+  var p=projAtivo;
+  copiar("TKD — The Koncept Design\nProjecto: "+p.nome
+    +"\nLink: "+linkPartilha()+"?k="+encodeURIComponent(p.senha)
+    +"\nSenha: "+p.senha,"Convite copiado — pronto a enviar.");
+});
+$("btn-wa").addEventListener("click",function(){
+  var p=projAtivo;
+  var txt="TKD — The Koncept Design\nProjecto: "+p.nome
+    +"\nLink: "+linkPartilha()+"?k="+encodeURIComponent(p.senha)
+    +"\nSenha: "+p.senha;
+  window.open("https://wa.me/?text="+encodeURIComponent(txt),"_blank");
+});
+$("btn-nova-senha").addEventListener("click",function(){
+  var p=projAtivo,nova=gerarSenha();
+  modal('<h3>Gerar nova senha</h3><div class="sub">A senha actual deixa de funcionar.</div>'
+    +'<label>Nova senha</label><input id="m-senha" value="'+nova+'" style="font-family:var(--font-mono);letter-spacing:.2em;text-transform:uppercase">'
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-ok">Aplicar</button></div>');
+  $("m-ok").onclick=function(){
+    var s=$("m-senha").value.trim().toUpperCase();if(!s)return;
+    var hashAntiga=p.senhaHash;
+    hashSenha(s).then(function(h){
+      if(fb.ref&&hashAntiga)fb.ref.child("indice/"+hashAntiga).remove();
+      p.senha=s;p.senhaHash=h;salvarProjeto(p,true);
+      fecharModal();renderEditor();toast("Senha actualizada.");
+    });
+  };
+});
+$("btn-apagar-proj").addEventListener("click",function(){
+  var p=projAtivo;
+  modal('<h3>Apagar projecto</h3><div class="sub">«'+esc(p.nome)+'» será removido de todos os aparelhos. Esta acção não pode ser desfeita.</div>'
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn danger" id="m-del" style="border-color:var(--danger)">Apagar definitivamente</button></div>');
+  $("m-del").onclick=function(){
+    apagarProjeto(p);fecharModal();toast("Projecto apagado.");abrirAdmin();
+  };
+});
+
+/* ---------------- cenas 360 ---------------- */
+function cenasOrdenadas(p){
+  return Object.values(p.cenas||{}).sort(function(a,b){return (a.ordem||0)-(b.ordem||0)});
+}
+function renderListaCenas(){
+  var p=projAtivo,l=$("lista-cenas"),cenas=cenasOrdenadas(p);
+  if(!cenas.length){
+    l.innerHTML='<div class="empty">Sem cenas 360º.<div class="cota">Adicione a primeira imagem equirectangular</div></div>';
+    return;
+  }
+  l.innerHTML=cenas.map(function(c){
+    var nHs=Object.keys(c.hotspots||{}).length;
+    return '<div class="item"><div class="thumb" style="background-image:url(\''+esc(c.url)+'\')"></div>'
+      +'<div class="grow"><div class="t">'+esc(c.nome)+(c.inicial?' <span class="chip-ini">inicial</span>':'')+'</div>'
+      +'<div class="s">'+nHs+' hotspot'+(nHs===1?"":"s")+'</div></div>'
+      +'<div class="acts">'
+      +'<button class="btn mini ghost" data-hs="'+c.id+'">Hotspots</button>'
+      +'<button class="btn mini ghost" data-ini="'+c.id+'" title="Definir como cena inicial">⌂</button>'
+      +'<button class="btn mini ghost" data-ed="'+c.id+'">✎</button>'
+      +'<button class="btn mini danger" data-del="'+c.id+'">✕</button>'
+      +'</div></div>';
+  }).join("");
+  l.querySelectorAll("[data-hs]").forEach(function(b){b.onclick=function(){abrirHsEditor(b.dataset.hs)}});
+  l.querySelectorAll("[data-ini]").forEach(function(b){b.onclick=function(){
+    Object.values(projAtivo.cenas).forEach(function(c){c.inicial=(c.id===b.dataset.ini)});
+    salvarProjeto(projAtivo,true);renderListaCenas();toast("Cena inicial definida.");
+  }});
+  l.querySelectorAll("[data-ed]").forEach(function(b){b.onclick=function(){modalCena(projAtivo.cenas[b.dataset.ed])}});
+  l.querySelectorAll("[data-del]").forEach(function(b){b.onclick=function(){
+    var c=projAtivo.cenas[b.dataset.del];
+    if(!confirm("Apagar a cena «"+c.nome+"»?"))return;
+    delete projAtivo.cenas[c.id];
+    /* limpar hotspots de outras cenas que apontavam para esta */
+    Object.values(projAtivo.cenas).forEach(function(o){
+      Object.keys(o.hotspots||{}).forEach(function(hid){
+        if(o.hotspots[hid].tipo==="cena"&&o.hotspots[hid].destino===c.id)delete o.hotspots[hid];
+      });
+    });
+    fecharHsEditor();salvarProjeto(projAtivo,true);renderListaCenas();
+  }});
+}
+$("btn-nova-cena").addEventListener("click",function(){modalCena(null)});
+function modalCena(c){
+  var nova=!c;
+  modal('<h3>'+(nova?'Nova cena 360º':'Editar cena')+'</h3>'
+    +'<div class="sub">Imagem equirectangular (proporção 2:1) num link directo.</div>'
+    +'<label>Nome da cena</label><input id="m-cnome" value="'+esc(c?c.nome:"")+'" placeholder="Ex.: Sala de estar">'
+    +'<label>URL da imagem 360º</label><input id="m-curl" value="'+esc(c?c.url:"")+'" placeholder="https://…/sala.jpg">'
+    +htmlUpload("m-cup")
+    +'<p class="hint">Pode colar um URL (alojamento com CORS aberto) ou carregar directamente do aparelho para o Firebase Storage.</p>'
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-ok">'+(nova?'Adicionar':'Guardar')+'</button></div>');
+  $("m-cnome").focus();
+  ligarUpload("m-cup",{maxW:6000,pasta:"cenas"},function(u){$("m-curl").value=u});
+  $("m-ok").onclick=function(){
+    var nome=$("m-cnome").value.trim(),url=$("m-curl").value.trim();
+    if(!nome||!url){toast("Indique o nome e o URL.");return}
+    var p=projAtivo;p.cenas=p.cenas||{};
+    if(nova){
+      var id=uid();
+      p.cenas[id]={id:id,nome:nome,url:url,ordem:Object.keys(p.cenas).length,
+        inicial:!Object.keys(p.cenas).length,hotspots:{}};
+    }else{c.nome=nome;c.url=url}
+    salvarProjeto(p,true);fecharModal();renderListaCenas();
+  };
+}
+
+/* ---------------- editor de hotspots ---------------- */
+var adminViewer=null,cenaHsId=null,modoColocar=false;
+function abrirHsEditor(cenaId){
+  cenaHsId=cenaId;modoColocar=false;
+  var c=projAtivo.cenas[cenaId];
+  $("hs-editor").style.display="block";
+  $("hs-cena-nome").textContent="Hotspots — "+c.nome;
+  montarViewerAdmin();
+  renderListaHs();
+  $("hs-editor").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function fecharHsEditor(){
+  $("hs-editor").style.display="none";
+  if(adminViewer){try{adminViewer.destroy()}catch(e){}adminViewer=null}
+  cenaHsId=null;modoColocar=false;
+}
+$("btn-fechar-hs").addEventListener("click",fecharHsEditor);
+$("btn-colocar-hs").addEventListener("click",function(){
+  modoColocar=!modoColocar;
+  this.textContent=modoColocar?"Clique na imagem…":"Colocar hotspot";
+  this.classList.toggle("accent",!modoColocar);
+  $("pano-admin").style.cursor=modoColocar?"crosshair":"";
+});
+function montarViewerAdmin(){
+  if(adminViewer){try{adminViewer.destroy()}catch(e){}}
+  var c=projAtivo.cenas[cenaHsId];
+  adminViewer=pannellum.viewer("pano-admin",{
+    type:"equirectangular",panorama:c.url,autoLoad:true,showZoomCtrl:false,
+    hfov:100,friction:0.15,
+    hotSpots:hotspotsPannellum(c,null,true)
+  });
+  function colocarEm(ev){
+    if(!modoColocar)return;
+    var co;try{co=adminViewer.mouseEventToCoords(ev)}catch(e){return}
+    modoColocar=false;
+    $("btn-colocar-hs").textContent="Colocar hotspot";
+    $("btn-colocar-hs").classList.add("accent");
+    $("pano-admin").style.cursor="";
+    modalHotspot(co[0],co[1]);
+  }
+  adminViewer.on("mousedown",colocarEm);
+  adminViewer.on("touchend",function(e){
+    if(!modoColocar||!e.changedTouches||!e.changedTouches.length)return;
+    var t=e.changedTouches[0];
+    colocarEm({clientX:t.clientX,clientY:t.clientY});
+  });
+}
+function modalHotspot(pitch,yaw){
+  var outras=cenasOrdenadas(projAtivo).filter(function(x){return x.id!==cenaHsId});
+  modal('<h3>Novo hotspot</h3><div class="sub">Ponto interactivo na posição escolhida.</div>'
+    +'<label>Tipo</label><select id="m-htipo">'
+    +(outras.length?'<option value="cena">Ir para outra cena</option>':'')
+    +'<option value="info">Nota informativa</option></select>'
+    +'<div id="m-hdest-w"'+(outras.length?'':' style="display:none"')+'><label>Cena de destino</label><select id="m-hdest">'
+    +outras.map(function(x){return '<option value="'+x.id+'">'+esc(x.nome)+'</option>'}).join("")
+    +'</select></div>'
+    +'<label>Texto (aparece junto ao ponto)</label><input id="m-htxt" placeholder="Ex.: Seguir para a cozinha">'
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-ok">Colocar</button></div>');
+  $("m-htipo").onchange=function(){
+    $("m-hdest-w").style.display=this.value==="cena"?"":"none";
+  };
+  if(!outras.length)$("m-htipo").value="info";
+  $("m-ok").onclick=function(){
+    var tipo=$("m-htipo").value,
+        h={id:uid(),pitch:Math.round(pitch*10)/10,yaw:Math.round(yaw*10)/10,
+           tipo:tipo,destino:tipo==="cena"?$("m-hdest").value:"",
+           texto:$("m-htxt").value.trim()};
+    if(tipo==="info"&&!h.texto){toast("Escreva o texto da nota.");return}
+    var c=projAtivo.cenas[cenaHsId];c.hotspots=c.hotspots||{};
+    c.hotspots[h.id]=h;
+    salvarProjeto(projAtivo,true);fecharModal();
+    montarViewerAdmin();renderListaHs();renderListaCenas();
+  };
+}
+function renderListaHs(){
+  var c=projAtivo.cenas[cenaHsId],l=$("lista-hs"),hs=Object.values(c.hotspots||{});
+  l.innerHTML=hs.length?hs.map(function(h){
+    var dest=h.tipo==="cena"?(projAtivo.cenas[h.destino]||{}).nome||"?":"";
+    return '<div class="item"><div class="grow">'
+      +'<div class="t">'+(h.tipo==="cena"?"→ "+esc(dest):"ⓘ "+esc(h.texto))+'</div>'
+      +'<div class="s">pitch '+h.pitch+'° · yaw '+h.yaw+'°'+(h.tipo==="cena"&&h.texto?' · «'+esc(h.texto)+'»':'')+'</div></div>'
+      +'<div class="acts"><button class="btn mini danger" data-del="'+h.id+'">✕</button></div></div>';
+  }).join(""):'<p class="hint" style="margin-top:12px">Ainda sem hotspots nesta cena.</p>';
+  l.querySelectorAll("[data-del]").forEach(function(b){b.onclick=function(){
+    delete c.hotspots[b.dataset.del];
+    salvarProjeto(projAtivo,true);montarViewerAdmin();renderListaHs();renderListaCenas();
+  }});
+}
+
+/* hotspots no formato do pannellum */
+function hsTip(div,args){
+  if(args.texto){
+    div.classList.add("pnlm-tooltip");
+    var s=document.createElement("span");s.textContent=args.texto;div.appendChild(s);
+    s.style.width=s.scrollWidth-20+"px";
+    s.style.marginLeft=-(s.scrollWidth-div.offsetWidth)/2+"px";
+    s.style.marginTop=-s.scrollHeight-16+"px";
+  }
+}
+function hotspotsPannellum(cena,aoMudarCena,estatico){
+  return Object.values(cena.hotspots||{}).map(function(h){
+    var spec={pitch:h.pitch,yaw:h.yaw,
+      cssClass:"hs-tkd"+(h.tipo==="info"?" info":""),
+      createTooltipFunc:hsTip,createTooltipArgs:{texto:h.texto,tipo:h.tipo}};
+    if(h.tipo==="cena"&&!estatico){
+      spec.clickHandlerFunc=function(){if(aoMudarCena)aoMudarCena(h.destino)};
+      spec.clickHandlerArgs=null;
+    }else if(h.tipo==="info"){
+      spec.clickHandlerFunc=function(){if(h.texto)toast(h.texto,{ms:4200})};
+    }
+    return spec;
+  });
+}
+
+
+/* ============================================================
+   PRANCHAS — imagens estáticas com caneta virtual
+   Cada traço é guardado como vector normalizado (0..1) e escrito
+   por caminho parcial, por isso cliente e TKD podem desenhar em
+   simultâneo sem se apagarem um ao outro.
+   ============================================================ */
+function pranOrdenadas(p){
+  return Object.values(p.pranchas||{}).sort(function(a,b){return (a.ordem||0)-(b.ordem||0)});
+}
+function contagemTracos(pr){
+  var t=Object.values(pr.tracos||{}),c=0,k=0;
+  t.forEach(function(x){x.autor==="cliente"?c++:k++});
+  return {cliente:c,tkd:k,total:t.length};
+}
+function renderListaPran(){
+  var p=projAtivo,l=$("lista-pran");if(!l)return;
+  var prs=pranOrdenadas(p);
+  if(!prs.length){
+    l.innerHTML='<div class="empty">Sem pranchas.<div class="cota">Adicione plantas ou renders para o cliente marcar</div></div>';
+    return;
+  }
+  l.innerHTML=prs.map(function(pr){
+    var n=contagemTracos(pr),nn=Object.keys(pr.notas||{}).length;
+    return '<div class="item"><div class="thumb" style="background-image:url(\''+esc(pr.url)+'\')"></div>'
+      +'<div class="grow"><div class="t">'+esc(pr.nome)+'</div>'
+      +'<div class="s">'+((n.total||nn)?(n.cliente+' marc. do cliente · '+n.tkd+' da TKD'+(nn?' · '+nn+' nota'+(nn===1?'':'s'):'')):'sem marcações')+'</div></div>'
+      +'<div class="acts">'
+      +'<button class="btn mini accent" data-ab="'+pr.id+'">Abrir</button>'
+      +'<button class="btn mini ghost" data-ed="'+pr.id+'">✎</button>'
+      +'<button class="btn mini danger" data-del="'+pr.id+'">✕</button>'
+      +'</div></div>';
+  }).join("");
+  l.querySelectorAll("[data-ab]").forEach(function(b){b.onclick=function(){abrirAnotador("ed",b.dataset.ab)}});
+  l.querySelectorAll("[data-ed]").forEach(function(b){b.onclick=function(){modalPrancha(projAtivo.pranchas[b.dataset.ed])}});
+  l.querySelectorAll("[data-del]").forEach(function(b){b.onclick=function(){
+    var pr=projAtivo.pranchas[b.dataset.del];
+    if(!confirm("Apagar a prancha «"+pr.nome+"» e todas as marcações?"))return;
+    delete projAtivo.pranchas[pr.id];
+    salvarProjeto(projAtivo,true);renderEditorSuave();
+  }});
+}
+$("btn-nova-pran").addEventListener("click",function(){modalPrancha(null)});
+function modalPrancha(pr){
+  var nova=!pr;
+  modal('<h3>'+(nova?'Nova prancha':'Editar prancha')+'</h3>'
+    +'<div class="sub">Imagem estática num link directo — planta, alçado ou render.</div>'
+    +'<label>Nome</label><input id="m-pnome" value="'+esc(pr?pr.nome:"")+'" placeholder="Ex.: Planta do piso 0">'
+    +'<label>URL da imagem</label><input id="m-purl" value="'+esc(pr?pr.url:"")+'" placeholder="https://…/planta.jpg">'
+    +htmlUpload("m-pup")
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-ok">'+(nova?'Adicionar':'Guardar')+'</button></div>');
+  $("m-pnome").focus();
+  ligarUpload("m-pup",{maxW:2400,pasta:"pranchas"},function(u){$("m-purl").value=u});
+  $("m-ok").onclick=function(){
+    var nome=$("m-pnome").value.trim(),url=$("m-purl").value.trim();
+    if(!nome||!url){toast("Indique o nome e o URL.");return}
+    var p=projAtivo;p.pranchas=p.pranchas||{};
+    if(nova){
+      var id=uid();
+      p.pranchas[id]={id:id,nome:nome,url:url,ordem:Object.keys(p.pranchas).length,tracos:{}};
+    }else{pr.nome=nome;pr.url=url}
+    salvarProjeto(p,true);fecharModal();renderEditorSuave();
+  };
+}
+function renderClPran(){
+  var p=projCliente,l=$("cl-lista-pran");if(!l)return;
+  var prs=pranOrdenadas(p);
+  l.innerHTML=prs.length?prs.map(function(pr){
+    var n=contagemTracos(pr),tot=n.total+Object.keys(pr.notas||{}).length;
+    return '<div class="card pran-card" data-ab="'+pr.id+'"><span class="corner tl"></span><span class="corner br"></span>'
+      +'<img loading="lazy" src="'+esc(pr.url)+'" alt="">'
+      +'<div class="t">'+esc(pr.nome)+'</div>'
+      +'<div class="s">'+(tot?'<span class="mark">'+tot+' marcaç'+(tot===1?'ão':'ões')+'</span>':'toque para marcar')+'</div>'
+      +'</div>';
+  }).join(""):'<div class="empty" style="grid-column:1/-1">As pranchas do projecto aparecerão aqui.<div class="cota">Plantas e renders para marcar com a caneta</div></div>';
+  l.querySelectorAll("[data-ab]").forEach(function(c){
+    c.onclick=function(){abrirAnotador("cl",c.dataset.ab)};
+  });
+}
+
+/* ---------------- anotador ---------------- */
+var anot={aberta:false,lado:null,pid:null,projId:null,box:null,
+          desenhando:false,traco:null,cor:"#C89B5A",dpr:1,modo:"caneta"};
+var anotCtx=null;
+function anotProjeto(){return anot.lado==="cl"?projCliente:projAtivo}
+function anotPrancha(){var p=anotProjeto();return p&&p.pranchas?p.pranchas[anot.pid]:null}
+function anotAutor(){return anot.lado==="cl"?"cliente":"tkd"}
+function abrirAnotador(lado,pid){
+  var p=(lado==="cl")?projCliente:projAtivo;
+  var pr=p.pranchas[pid];if(!pr)return;
+  anot.aberta=true;anot.lado=lado;anot.pid=pid;anot.projId=p.id;
+  anot.cor=lado==="cl"?"#C89B5A":"#EDEDE6";
+  
+/* ---------------- notas escritas ancoradas ---------------- */
+function anotModo(m){
+  anot.modo=m;
+  var bc=$("anot-m-caneta"),bn=$("anot-m-nota");
+  bc.className="btn mini"+(m==="caneta"?"":" ghost");
+  bn.className="btn mini"+(m==="nota"?"":" ghost");
+  $("anot-cv").style.cursor=m==="nota"?"copy":"crosshair";
+  $("anot-sub").textContent=m==="nota"
+    ?"Toque no ponto onde quer deixar a nota escrita"
+    :"Desenhe sobre a imagem · as marcações sincronizam ao levantar a caneta";
+}
+$("anot-m-caneta").addEventListener("click",function(){anotModo("caneta")});
+$("anot-m-nota").addEventListener("click",function(){anotModo("nota")});
+
+function notasOrdenadas(pr){
+  return Object.values((pr&&pr.notas)||{}).sort(function(a,b){return (a.data||0)-(b.data||0)});
+}
+function modalNota(x,y){
+  modal('<h3>Nota escrita</h3><div class="sub">Fica ancorada ao ponto que escolheu.</div>'
+    +'<label>A sua nota</label><textarea id="m-ntx" placeholder="Ex.: Prefiro a tomada mais próxima da bancada."></textarea>'
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-ok">Colocar nota</button></div>');
+  $("m-ntx").focus();
+  $("m-ok").onclick=function(){
+    var tx=$("m-ntx").value.trim();
+    if(!tx){toast("Escreva a nota.");return}
+    var n={id:uid(),autor:anotAutor(),x:Math.round(x*10000)/10000,
+           y:Math.round(y*10000)/10000,texto:tx,data:Date.now()};
+    var pr=anotPrancha();if(!pr)return;
+    pr.notas=pr.notas||{};pr.notas[n.id]=n;
+    atualizarCaminho(anot.projId,"pranchas/"+anot.pid+"/notas/"+n.id,n);
+    fecharModal();anotRenderPins();anotModo("caneta");
+    toast("Nota colocada.");
+  };
+}
+function anotRenderPins(){
+  var box=$("anot-pins");if(!box||!anot.aberta)return;
+  var pr=anotPrancha();
+  var notas=notasOrdenadas(pr);
+  box.innerHTML=notas.map(function(n,i){
+    return '<button class="anot-pin '+(n.autor==="cliente"?"cliente":"tkd")
+      +'" data-nota="'+n.id+'" style="left:'+(n.x*100)+'%;top:'+(n.y*100)+'%" '
+      +'title="'+esc(n.texto)+'">'+(i+1)+'</button>';
+  }).join("");
+  box.querySelectorAll("[data-nota]").forEach(function(b){
+    b.onclick=function(){abrirNota(b.dataset.nota)};
+  });
+}
+function abrirNota(nid){
+  var pr=anotPrancha();if(!pr||!pr.notas||!pr.notas[nid])return;
+  var n=pr.notas[nid],minha=n.autor===anotAutor();
+  modal('<h3>Nota '+(n.autor==="cliente"?"do cliente":"da TKD")+'</h3>'
+    +'<div class="sub">'+fmtData(n.data)+'</div>'
+    +'<p style="margin-top:16px;font-size:15px;line-height:1.65;white-space:pre-wrap">'+esc(n.texto)+'</p>'
+    +'<div class="acts">'
+    +(minha?'<button class="btn danger mini" id="m-del">Apagar nota</button>':'')
+    +'<button class="btn ghost" onclick="fecharModal()">Fechar</button></div>');
+  if(minha)$("m-del").onclick=function(){
+    delete pr.notas[nid];
+    atualizarCaminho(anot.projId,"pranchas/"+anot.pid+"/notas/"+nid,null);
+    fecharModal();anotRenderPins();
+  };
+}
+
+document.querySelectorAll(".dot-cor").forEach(function(d){
+    d.classList.toggle("on",d.dataset.cor===anot.cor);
+  });
+  $("anot-titulo").textContent=pr.nome;
+  anotModo("caneta");
+  $("anot").classList.add("on");
+  var img=$("anot-img");
+  img.onload=anotDimensionar;
+  if(img.src===pr.url)anotDimensionar();else img.src=pr.url;
+}
+function fecharAnotador(){
+  anot.aberta=false;anot.desenhando=false;
+  $("anot").classList.remove("on");
+  if(vistaAtual==="editor")renderEditorSuave();
+  if(vistaAtual==="client"&&projCliente)renderClPran();
+}
+$("anot-fechar").addEventListener("click",fecharAnotador);
+function anotDimensionar(){
+  if(!anot.aberta)return;
+  var img=$("anot-img"),cv=$("anot-cv"),st=$("anot-stage");
+  var sw=st.clientWidth-24,sh=st.clientHeight-24;
+  var iw=img.naturalWidth||4,ih=img.naturalHeight||3;
+  var fesc=Math.min(sw/iw,sh/ih),w=Math.round(iw*fesc),h=Math.round(ih*fesc);
+  var left=Math.round((st.clientWidth-w)/2),top=Math.round((st.clientHeight-h)/2);
+  [img,cv].forEach(function(el){
+    el.style.left=left+"px";el.style.top=top+"px";
+    el.style.width=w+"px";el.style.height=h+"px";
+  });
+  anot.dpr=Math.min(window.devicePixelRatio||1,2);
+  cv.width=w*anot.dpr;cv.height=h*anot.dpr;
+  anotCtx=cv.getContext("2d");
+  anotCtx.scale(anot.dpr,anot.dpr);
+  anotCtx.lineCap="round";anotCtx.lineJoin="round";
+  anot.box={w:w,h:h};
+  var pins=$("anot-pins");
+  pins.style.left=left+"px";pins.style.top=top+"px";
+  pins.style.width=w+"px";pins.style.height=h+"px";
+  anotRedesenhar();anotRenderPins();
+}
+window.addEventListener("resize",function(){if(anot.aberta)anotDimensionar()});
+function anotTracarCaminho(t){
+  var b=anot.box;if(!b||!t.pts||t.pts.length<4)return;
+  anotCtx.strokeStyle=t.cor||"#C89B5A";
+  anotCtx.lineWidth=Math.max(1.5,(t.esp||6)*(b.w/1000));
+  anotCtx.beginPath();
+  anotCtx.moveTo(t.pts[0]*b.w,t.pts[1]*b.h);
+  for(var i=2;i<t.pts.length;i+=2)anotCtx.lineTo(t.pts[i]*b.w,t.pts[i+1]*b.h);
+  anotCtx.stroke();
+}
+function anotRedesenhar(){
+  if(!anotCtx||!anot.box)return;
+  anotCtx.clearRect(0,0,anot.box.w,anot.box.h);
+  var pr=anotPrancha();if(!pr)return;
+  Object.values(pr.tracos||{})
+    .sort(function(a,b){return (a.data||0)-(b.data||0)})
+    .forEach(anotTracarCaminho);
+  if(anot.traco)anotTracarCaminho(anot.traco);
+}
+/* chega uma actualização remota enquanto o anotador está aberto */
+function anotSync(){
+  if(anot.aberta&&!anot.desenhando){anotRedesenhar();anotRenderPins()}
+}
+/* desenho com a caneta (rato, dedo ou stylus) */
+(function(){
+  var cv=$("anot-cv");
+  function ponto(e){
+    var r=cv.getBoundingClientRect();
+    return [Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),
+            Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))];
+  }
+  cv.addEventListener("pointerdown",function(e){
+    if(!anot.aberta)return;
+    if(anot.modo==="nota"){
+      e.preventDefault();
+      var p=ponto(e);
+      modalNota(p[0],p[1]);
+      return;
+    }
+    e.preventDefault();cv.setPointerCapture(e.pointerId);
+    var xy=ponto(e);
+    anot.desenhando=true;
+    anot.traco={id:uid(),autor:anotAutor(),cor:anot.cor,esp:6,
+                data:Date.now(),pts:[xy[0],xy[1]]};
+  });
+  cv.addEventListener("pointermove",function(e){
+    if(!anot.desenhando||!anot.traco)return;
+    var xy=ponto(e),pts=anot.traco.pts;
+    var dx=xy[0]-pts[pts.length-2],dy=xy[1]-pts[pts.length-1];
+    if(Math.sqrt(dx*dx+dy*dy)<0.003)return;
+    pts.push(xy[0],xy[1]);
+    anotRedesenhar();
+  });
+  function terminar(){
+    if(!anot.desenhando)return;
+    anot.desenhando=false;
+    var t=anot.traco;anot.traco=null;
+    if(t&&t.pts.length>=4){
+      t.pts=t.pts.map(function(v){return Math.round(v*10000)/10000});
+      var pr=anotPrancha();
+      if(pr){
+        pr.tracos=pr.tracos||{};pr.tracos[t.id]=t;
+        atualizarCaminho(anot.projId,"pranchas/"+anot.pid+"/tracos/"+t.id,t);
+      }
+    }
+    anotRedesenhar();
+  }
+  cv.addEventListener("pointerup",terminar);
+  cv.addEventListener("pointercancel",terminar);
+})();
+document.querySelectorAll(".dot-cor").forEach(function(d){
+  d.addEventListener("click",function(){
+    anot.cor=d.dataset.cor;
+    document.querySelectorAll(".dot-cor").forEach(function(x){x.classList.toggle("on",x===d)});
+  });
+});
+$("anot-undo").addEventListener("click",function(){
+  var pr=anotPrancha();if(!pr)return;
+  var meus=Object.values(pr.tracos||{}).filter(function(t){return t.autor===anotAutor()})
+    .sort(function(a,b){return (b.data||0)-(a.data||0)});
+  if(!meus.length){toast("Não tem marcações para desfazer.");return}
+  delete pr.tracos[meus[0].id];
+  atualizarCaminho(anot.projId,"pranchas/"+anot.pid+"/tracos/"+meus[0].id,null);
+  anotRedesenhar();
+});
+$("anot-limpar").addEventListener("click",function(){
+  var pr=anotPrancha();if(!pr)return;
+  var meus=Object.values(pr.tracos||{}).filter(function(t){return t.autor===anotAutor()});
+  if(!meus.length){toast("Não tem marcações nesta prancha.");return}
+  if(!confirm("Apagar todas as suas marcações desta prancha?"))return;
+  meus.forEach(function(t){
+    delete pr.tracos[t.id];
+    atualizarCaminho(anot.projId,"pranchas/"+anot.pid+"/tracos/"+t.id,null);
+  });
+  anotRedesenhar();
+});
+
+/* ---------------- revisões (admin) ---------------- */
+function revsOrdenadas(p){
+  return Object.values(p.revisoes||{}).sort(function(a,b){return (b.data||0)-(a.data||0)});
+}
+function renderEdRevs(){
+  var p=projAtivo,l=$("ed-lista-revs"),revs=revsOrdenadas(p);
+  l.innerHTML=revs.length?revs.map(function(r){
+    return blocoRev(r)+'<div style="margin:-22px 0 34px 0"><button class="btn mini danger" data-del="'+r.id+'">Apagar revisão</button></div>';
+  }).join(""):'<div class="empty">Sem revisões publicadas.<div class="cota">Cada revisão fica visível ao cliente de imediato</div></div>';
+  l.querySelectorAll("[data-del]").forEach(function(b){b.onclick=function(){
+    if(!confirm("Apagar esta revisão?"))return;
+    delete p.revisoes[b.dataset.del];salvarProjeto(p,true);renderEditorSuave();
+  }});
+  ligarImgs(l);ligarCmps(l);
+}
+$("btn-nova-rev").addEventListener("click",function(){
+  var p=projAtivo,n=Object.keys(p.revisoes||{}).length+1;
+  modal('<h3>Nova revisão</h3><div class="sub">Publicada de imediato para o cliente — REV '+String(n).padStart(2,"0")+'.</div>'
+    +'<label>Título</label><input id="m-rt" placeholder="Ex.: Ajuste da bancada e iluminação">'
+    +'<label>Notas para o cliente</label><textarea id="m-rn" placeholder="O que mudou nesta revisão…"></textarea>'
+    +'<label>Imagens (um URL por linha)</label><textarea id="m-ri" placeholder="https://…/render1.jpg&#10;https://…/render2.jpg"></textarea>'
+    +htmlUpload("m-rup",true)
+    +'<label>Comparação antes / depois (opcional)</label>'
+    +'<input id="m-ra" placeholder="URL — antes" style="margin-bottom:8px">'
+    +htmlUpload("m-raup")
+    +'<input id="m-rd" placeholder="URL — depois" style="margin-top:8px">'
+    +htmlUpload("m-rdup")
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-ok">Publicar revisão</button></div>');
+  ligarUpload("m-rup",{maxW:2000,pasta:"revisoes"},function(u){
+    $("m-ri").value=($("m-ri").value.trim()?$("m-ri").value.trim()+"\n":"")+u;
+  });
+  ligarUpload("m-raup",{maxW:2000,pasta:"revisoes"},function(u){$("m-ra").value=u});
+  ligarUpload("m-rdup",{maxW:2000,pasta:"revisoes"},function(u){$("m-rd").value=u});
+  $("m-ok").onclick=function(){
+    var t=$("m-rt").value.trim();if(!t){toast("Dê um título à revisão.");return}
+    var imgs=$("m-ri").value.split("\n").map(function(s){return s.trim()}).filter(Boolean);
+    var r={id:uid(),versao:n,titulo:t,notas:$("m-rn").value.trim(),data:Date.now(),
+      imagens:imgs,antes:$("m-ra").value.trim(),depois:$("m-rd").value.trim()};
+    p.revisoes=p.revisoes||{};p.revisoes[r.id]=r;
+    salvarProjeto(p,true);fecharModal();renderEditorSuave();toast("Revisão publicada.");
+  };
+});
+function blocoRev(r){
+  var imgs=(r.imagens||[]).map(function(u){return '<img loading="lazy" src="'+esc(u)+'" data-lb="'+esc(u)+'" alt="">'}).join("");
+  var cmp=(r.antes&&r.depois)?
+    '<div class="cmp" data-cmp><img class="base" src="'+esc(r.antes)+'" alt="Antes">'
+    +'<img class="top" src="'+esc(r.depois)+'" alt="Depois"><div class="bar"></div>'
+    +'<span class="lbl a">Antes</span><span class="lbl b">Depois</span></div>':'';
+  return '<div class="rev"><span class="v">REV '+String(r.versao).padStart(2,"0")+'</span>'
+    +'<h4>'+esc(r.titulo)+'</h4><div class="d">'+fmtData(r.data)+'</div>'
+    +(r.notas?'<p>'+esc(r.notas)+'</p>':'')
+    +(imgs?'<div class="rev-imgs">'+imgs+'</div>':'')
+    +cmp+'</div>';
+}
+function ligarImgs(raiz){
+  raiz.querySelectorAll("[data-lb]").forEach(function(im){
+    im.onclick=function(){abrirLb(im.dataset.lb)};
+  });
+}
+function ligarCmps(raiz){
+  raiz.querySelectorAll("[data-cmp]").forEach(function(c){
+    function mover(e){
+      var r=c.getBoundingClientRect(),
+          x=((e.touches?e.touches[0].clientX:e.clientX)-r.left)/r.width*100;
+      c.style.setProperty("--x",Math.max(2,Math.min(98,x))+"%");
+    }
+    c.addEventListener("pointerdown",function(e){
+      mover(e);
+      function mv(ev){mover(ev)}
+      function up(){window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up)}
+      window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);
+    });
+  });
+}
+
+/* ---------------- decisões (admin) ---------------- */
+function decsOrdenadas(p){
+  return Object.values(p.decisoes||{}).sort(function(a,b){return (b.criadaEm||0)-(a.criadaEm||0)});
+}
+function renderEdDecs(){
+  var p=projAtivo,l=$("ed-lista-decs"),decs=decsOrdenadas(p);
+  l.innerHTML=decs.length?decs.map(function(d){
+    return '<div class="card dec"><span class="corner tl"></span><span class="corner br"></span>'
+      +'<div class="q">'+esc(d.pergunta)+'</div>'
+      +'<div class="hint">Opções: '+(d.opcoes||[]).map(esc).join(" · ")+'</div>'
+      +(d.resposta?
+        '<div class="resp"><div class="r">✓ '+esc(d.resposta)+'</div>'
+        +(d.comentario?'<div class="c">'+esc(d.comentario)+'</div>':'')
+        +'<div class="d">'+fmtData(d.respondidaEm)+'</div></div>'
+        :'<div class="hint" style="color:var(--warn)">Aguarda resposta do cliente.</div>')
+      +'<div style="margin-top:14px"><button class="btn mini danger" data-del="'+d.id+'">Apagar</button></div>'
+      +'</div>';
+  }).join(""):'<div class="empty">Sem pedidos de decisão.<div class="cota">Peça aprovações rápidas ao cliente</div></div>';
+  l.querySelectorAll("[data-del]").forEach(function(b){b.onclick=function(){
+    if(!confirm("Apagar este pedido de decisão?"))return;
+    delete p.decisoes[b.dataset.del];salvarProjeto(p,true);renderEditorSuave();
+  }});
+}
+$("btn-nova-dec").addEventListener("click",function(){
+  var p=projAtivo;
+  modal('<h3>Pedir decisão</h3><div class="sub">O cliente responde com um toque.</div>'
+    +'<label>Pergunta</label><input id="m-dq" placeholder="Ex.: Aprova o acabamento em carvalho?">'
+    +'<label>Opções (uma por linha)</label><textarea id="m-do">Aprovo\nPrefiro alterações</textarea>'
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Cancelar</button>'
+    +'<button class="btn accent" id="m-ok">Enviar ao cliente</button></div>');
+  $("m-ok").onclick=function(){
+    var q=$("m-dq").value.trim(),
+        ops=$("m-do").value.split("\n").map(function(s){return s.trim()}).filter(Boolean);
+    if(!q||ops.length<2){toast("Indique a pergunta e pelo menos duas opções.");return}
+    var d={id:uid(),pergunta:q,opcoes:ops,criadaEm:Date.now(),resposta:"",comentario:"",respondidaEm:0};
+    p.decisoes=p.decisoes||{};p.decisoes[d.id]=d;
+    if(p.estado==="curso")p.estado="decisao";
+    salvarProjeto(p,true);fecharModal();renderEditorSuave();toast("Pedido enviado.");
+  };
+});
+
+
+/* ============================================================
+   ACTA DE DECISÕES — documento imprimível (Guardar como PDF)
+   Regista todas as decisões do cliente e as notas ancoradas nas
+   pranchas, com espaço para assinaturas.
+   ============================================================ */
+$("btn-acta").addEventListener("click",function(){
+  var p=projAtivo;if(!p)return;
+  var decs=decsOrdenadas(p).slice().reverse(); /* ordem cronológica */
+  var linhasDec=decs.length?decs.map(function(d,i){
+    return '<div class="bloco">'
+      +'<div class="num">'+String(i+1).padStart(2,"0")+'</div>'
+      +'<div class="corpo"><div class="perg">'+esc(d.pergunta)+'</div>'
+      +'<div class="ops">Opções apresentadas: '+(d.opcoes||[]).map(esc).join(" · ")+'</div>'
+      +(d.resposta
+        ?'<div class="resp">Decisão do cliente: <b>'+esc(d.resposta)+'</b></div>'
+         +(d.comentario?'<div class="com">Comentário: '+esc(d.comentario)+'</div>':'')
+         +'<div class="dt">Registada a '+fmtData(d.respondidaEm)+'</div>'
+        :'<div class="resp pend">— Pendente à data de emissão —</div>'
+         +'<div class="dt">Solicitada a '+fmtData(d.criadaEm)+'</div>')
+      +'</div></div>';
+  }).join(""):'<p class="vazio">Sem pedidos de decisão registados.</p>';
+  var notas=[];
+  pranOrdenadas(p).forEach(function(pr){
+    notasOrdenadas(pr).forEach(function(n){
+      notas.push({pr:pr.nome,n:n});
+    });
+  });
+  var linhasNotas=notas.length?notas.map(function(x,i){
+    return '<div class="bloco"><div class="num">N'+(i+1)+'</div>'
+      +'<div class="corpo"><div class="perg">'+esc(x.n.texto)+'</div>'
+      +'<div class="dt">'+(x.n.autor==="cliente"?"Cliente":"TKD")+' · prancha «'+esc(x.pr)+'» · '+fmtData(x.n.data)+'</div>'
+      +'</div></div>';
+  }).join(""):'';
+  var w=window.open("","_blank");
+  if(!w){toast("Permita janelas pop-up para exportar a acta.");return}
+  w.document.write('<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8">'
+    +'<title>Acta — '+esc(p.nome)+'</title><style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:Georgia,serif;color:#141410;padding:52px 56px;font-size:13.5px;line-height:1.6}'
+    +'.mono{font-family:"Courier New",monospace;letter-spacing:.14em;text-transform:uppercase;font-size:9.5px;color:#6d6d5f}'
+    +'header{display:flex;gap:18px;align-items:center;border-bottom:1.5px solid #141410;padding-bottom:22px;margin-bottom:30px}'
+    +'.logo div{width:22px;height:22px;border:1.4px solid #141410;display:flex;align-items:center;justify-content:center;'
+    +'font-family:"Courier New",monospace;font-size:10px;margin-bottom:2px}'
+    +'h1{font-size:22px;font-weight:normal;letter-spacing:.02em}'
+    +'.meta{margin:4px 0 0}'
+    +'h2{font-size:11px;font-family:"Courier New",monospace;letter-spacing:.2em;text-transform:uppercase;'
+    +'color:#6d6d5f;margin:34px 0 14px;border-bottom:1px solid #d8d8cf;padding-bottom:8px}'
+    +'.bloco{display:flex;gap:16px;padding:14px 0;border-bottom:1px solid #ecece5;page-break-inside:avoid}'
+    +'.num{font-family:"Courier New",monospace;font-size:11px;color:#a8863f;min-width:26px;padding-top:2px}'
+    +'.perg{font-weight:bold;font-size:14px}'
+    +'.ops{color:#6d6d5f;font-size:12px;margin-top:4px}'
+    +'.resp{margin-top:8px}.resp.pend{color:#a05a3c;font-style:italic}'
+    +'.com{color:#41413a;margin-top:4px;font-style:italic}'
+    +'.dt{font-family:"Courier New",monospace;font-size:9.5px;color:#9a9a8c;margin-top:6px;letter-spacing:.08em}'
+    +'.vazio{color:#6d6d5f;font-style:italic}'
+    +'.assin{display:flex;gap:60px;margin-top:70px;page-break-inside:avoid}'
+    +'.assin div{flex:1;border-top:1px solid #141410;padding-top:8px;font-size:11px;text-align:center}'
+    +'footer{margin-top:50px;text-align:center}'
+    +'@media print{body{padding:24px 8px}}'
+    +'</style></head><body>'
+    +'<header><div class="logo"><div>T</div><div>K</div><div>D</div></div>'
+    +'<div style="flex:1"><div class="mono">The Koncept Design · Acta de Decisões</div>'
+    +'<h1>'+esc(p.nome)+'</h1>'
+    +'<div class="meta mono">Cliente: '+esc(p.cliente||"—")+' · Estado: '+nomeEstado(p.estado)
+    +' · Emitida a '+fmtData(Date.now())+'</div></div></header>'
+    +'<h2>Decisões</h2>'+linhasDec
+    +(linhasNotas?'<h2>Notas ancoradas nas pranchas</h2>'+linhasNotas:'')
+    +'<div class="assin"><div>O Cliente</div><div>TKD · The Koncept Design</div></div>'
+    +'<footer class="mono">TKD VIEW v'+APP_VERSION+' — documento gerado automaticamente</footer>'
+    +'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print()},350)}</scr'+'ipt>'
+    +'</body></html>');
+  w.document.close();
+});
+
+/* ---------------- mensagens (partilhado) ---------------- */
+function msgsOrdenadas(p){
+  return Object.values(p.msgs||{}).sort(function(a,b){return (a.data||0)-(b.data||0)});
+}
+function renderMsgs(lado){
+  var p=(lado==="ed")?projAtivo:projCliente;if(!p)return;
+  var l=$(lado+"-msgs-lista");
+  var eu=(lado==="ed")?"tkd":"cliente";
+  l.innerHTML=msgsOrdenadas(p).map(function(m){
+    var cls=(m.autor===eu)?"cliente":"tkd"; /* o próprio à direita */
+    return '<div class="msg '+cls+'">'+esc(m.texto)
+      +'<div class="d">'+(m.autor==="tkd"?"TKD":"Cliente")+' · '+fmtData(m.data)+'</div></div>';
+  }).join("")||'<p class="hint">Sem mensagens. Escreva a primeira.</p>';
+  l.scrollTop=l.scrollHeight;
+}
+function enviarMsg(lado,texto){
+  var p=(lado==="ed")?projAtivo:projCliente;if(!p||!texto)return;
+  var m={id:uid(),autor:(lado==="ed")?"tkd":"cliente",texto:texto,data:Date.now()};
+  atualizarCaminho(p.id,"msgs/"+m.id,m);
+  p.msgs=p.msgs||{};p.msgs[m.id]=m;
+  renderMsgs(lado);
+}
+$("ed-msg-form").addEventListener("submit",function(e){
+  e.preventDefault();var v=$("ed-msg-input").value.trim();
+  if(v){enviarMsg("ed",v);$("ed-msg-input").value=""}
+});
+$("cl-msg-form").addEventListener("submit",function(e){
+  e.preventDefault();var v=$("cl-msg-input").value.trim();
+  if(v){enviarMsg("cl",v);$("cl-msg-input").value=""}
+});
+
+
+/* ============================================================
+   NOVIDADES — pastilhas nas abas e resumo de actividade
+   Guarda no aparelho do cliente quando cada secção foi vista
+   e assinala o que chegou desde então.
+   ============================================================ */
+function vistoLer(pid){
+  try{return JSON.parse(localStorage.getItem("tkd_seen_"+pid))||{}}catch(e){return{}}
+}
+function vistoGravar(pid,sec){
+  var v=vistoLer(pid);v[sec]=Date.now();
+  try{localStorage.setItem("tkd_seen_"+pid,JSON.stringify(v))}catch(e){}
+}
+function novidadesCliente(p){
+  var v=vistoLer(p.id);
+  var novRevs=Object.values(p.revisoes||{}).filter(function(r){return (r.data||0)>(v["cl-revs"]||0)}).length;
+  var pendDecs=Object.values(p.decisoes||{}).filter(function(d){return !d.resposta}).length;
+  var novMsgs=Object.values(p.msgs||{}).filter(function(m){return m.autor==="tkd"&&(m.data||0)>(v["cl-msgs"]||0)}).length;
+  var novPran=0;
+  Object.values(p.pranchas||{}).forEach(function(pr){
+    Object.values(pr.tracos||{}).concat(Object.values(pr.notas||{})).forEach(function(t){
+      if(t.autor==="tkd"&&(t.data||0)>(v["cl-pran"]||0))novPran++;
+    });
+  });
+  return {revs:novRevs,decs:pendDecs,msgs:novMsgs,pran:novPran};
+}
+function aplicarNovidades(p){
+  var n=novidadesCliente(p);
+  var mapa={"cl-revs":n.revs,"cl-decs":n.decs,"cl-msgs":n.msgs,"cl-pran":n.pran};
+  document.querySelectorAll("#view-client .cl-tabs .tab").forEach(function(t){
+    var pane=t.dataset.pane;
+    /* a secção aberta conta como vista */
+    if(t.classList.contains("on")&&mapa[pane]){vistoGravar(p.id,pane);mapa[pane]=0}
+    t.classList.toggle("novo",!!mapa[pane]);
+  });
+  var partes=[];
+  if(n.decs)partes.push(n.decs+" decis"+(n.decs===1?"ão aguarda":"ões aguardam")+" a sua resposta");
+  if(n.revs)partes.push(n.revs+" nova"+(n.revs===1?" revisão":"s revisões"));
+  if(n.pran)partes.push(n.pran+" marcaç"+(n.pran===1?"ão":"ões")+" da TKD nas pranchas");
+  if(n.msgs)partes.push(n.msgs+" mensagem"+(n.msgs===1?"":"s")+" nova"+(n.msgs===1?"":"s"));
+  $("cl-resumo").textContent=partes.join("  ·  ");
+}
+
+/* ============================================================
+   VISTA DO CLIENTE
+   ============================================================ */
+var clViewer=null,projCliente=null,cenaClAtiva=null;
+function destruirViewers(){
+  if(clViewer){try{clViewer.destroy()}catch(e){}clViewer=null}
+  fecharHsEditor();
+  if(anot.aberta){anot.aberta=false;$("anot").classList.remove("on")}
+}
+function renderClient(p,suave){
+  projCliente=p;
+  $("cl-topo-nome").textContent=p.nome||"";
+  $("cl-nome").innerHTML=esc(p.nome||"").replace(/^(\S+)/,"<b>$1</b>");
+  $("cl-cli").textContent=p.cliente?("Preparado para "+p.cliente):"";
+  $("cl-estado").className="tag "+(p.estado||"curso");
+  $("cl-estado").textContent=nomeEstado(p.estado);
+  $("cl-atual").textContent="Actualizado a "+fmtData(p.atualizadoEm);
+  $("cl-nota").textContent=p.nota||"";
+  $("ver-cli").textContent="v"+APP_VERSION;
+  $("cl-n-revs").textContent=Object.keys(p.revisoes||{}).length||"";
+  var pend=Object.values(p.decisoes||{}).filter(function(d){return!d.resposta}).length;
+  $("cl-n-decs").textContent=pend?pend+"↺":(Object.keys(p.decisoes||{}).length||"");
+  $("cl-n-msgs").textContent=Object.keys(p.msgs||{}).length||"";
+  $("cl-n-pran").textContent=Object.keys(p.pranchas||{}).length||"";
+  montarTourCliente(suave);
+  renderClRevs();renderClDecs();renderClPran();renderMsgs("cl");
+  aplicarNovidades(p);
+  anotSync();
+  if(suave)toast("O projecto foi actualizado.");
+}
+function montarTourCliente(suave){
+  var p=projCliente,cenas=cenasOrdenadas(p),shell=$("pano");
+  $("cl-cenas").innerHTML=cenas.map(function(c){
+    return '<button class="scene-chip'+((cenaClAtiva||{} ).id===c.id?' on':'')+'" data-c="'+c.id+'">'
+      +'<img loading="lazy" src="'+esc(c.url)+'" alt=""><span>'+esc(c.nome)+'</span></button>';
+  }).join("");
+  $("cl-cenas").querySelectorAll(".scene-chip").forEach(function(b){
+    b.onclick=function(){irParaCena(b.dataset.c)};
+  });
+  if(!cenas.length){
+    if(clViewer){try{clViewer.destroy()}catch(e){}clViewer=null}
+    shell.innerHTML='<div class="pano-empty"><div class="tkd-logo sm"><div class="q">T</div><div class="q">K</div><div class="q">D</div></div>'
+      +'<span>O tour 360º será publicado em breve.</span></div>';
+    return;
+  }
+  /* evitar reconstruir o viewer num sync se as cenas não mudaram */
+  if(suave&&clViewer&&JSON.stringify(cenas)===montarTourCliente._ultimo)return;
+  montarTourCliente._ultimo=JSON.stringify(cenas);
+  if(clViewer){try{clViewer.destroy()}catch(e){}clViewer=null}
+  shell.innerHTML="";
+  var inicial=(cenas.find(function(c){return c.inicial})||cenas[0]);
+  cenaClAtiva=inicial;
+  var scenes={};
+  cenas.forEach(function(c){
+    scenes[c.id]={type:"equirectangular",panorama:c.url,
+      hotSpots:hotspotsPannellum(c,irParaCena,false)};
+  });
+  clViewer=pannellum.viewer("pano",{
+    default:{firstScene:inicial.id,sceneFadeDuration:900,autoLoad:true,hfov:100,
+             friction:0.15,autoRotate:-2,autoRotateInactivityDelay:20000},
+    scenes:scenes,showZoomCtrl:false,showFullscreenCtrl:true,compass:false
+  });
+  clViewer.on("scenechange",function(id){
+    cenaClAtiva=projCliente.cenas[id]||cenaClAtiva;
+    $("cl-cenas").querySelectorAll(".scene-chip").forEach(function(b){
+      b.classList.toggle("on",b.dataset.c===id);
+    });
+    $("pano-cota").textContent=(projCliente.cenas[id]||{}).nome||"";
+  });
+}
+function irParaCena(id){
+  if(clViewer)clViewer.loadScene(id);
+}
+function renderClRevs(){
+  var p=projCliente,l=$("cl-lista-revs");
+  var revs=revsOrdenadas(p);
+  l.innerHTML=revs.length?revs.map(blocoRev).join("")
+    :'<div class="empty">As revisões do projecto aparecerão aqui.<div class="cota">Receberá cada actualização em tempo real</div></div>';
+  ligarImgs(l);ligarCmps(l);
+}
+function renderClDecs(){
+  var p=projCliente,l=$("cl-lista-decs"),decs=decsOrdenadas(p);
+  l.innerHTML=decs.length?decs.map(function(d){
+    if(d.resposta){
+      return '<div class="card dec"><span class="corner tl"></span><span class="corner br"></span>'
+        +'<div class="q">'+esc(d.pergunta)+'</div>'
+        +'<div class="resp"><div class="r">✓ '+esc(d.resposta)+'</div>'
+        +(d.comentario?'<div class="c">'+esc(d.comentario)+'</div>':'')
+        +'<div class="d">Respondido a '+fmtData(d.respondidaEm)+'</div></div></div>';
+    }
+    return '<div class="card dec"><span class="corner tl"></span><span class="corner br"></span>'
+      +'<div class="q">'+esc(d.pergunta)+'</div>'
+      +'<div class="opts">'+(d.opcoes||[]).map(function(o,i){
+        return '<button class="btn '+(i===0?'accent':'ghost')+'" data-dec="'+d.id+'" data-op="'+esc(o)+'">'+esc(o)+'</button>';
+      }).join("")+'</div>'
+      +'<label>Comentário (opcional)</label><textarea id="dc-'+d.id+'" placeholder="Alguma nota para a TKD?"></textarea>'
+      +'</div>';
+  }).join(""):'<div class="empty">Sem decisões pendentes.<div class="cota">Quando a TKD precisar da sua aprovação, aparecerá aqui</div></div>';
+  l.querySelectorAll("[data-dec]").forEach(function(b){
+    b.onclick=function(){
+      var d=projCliente.decisoes[b.dataset.dec];
+      d.resposta=b.dataset.op;
+      d.comentario=($("dc-"+d.id)||{}).value||"";
+      d.respondidaEm=Date.now();
+      atualizarCaminho(projCliente.id,"decisoes/"+d.id,d);
+      renderClDecs();
+      $("cl-n-decs").textContent=Object.values(projCliente.decisoes).filter(function(x){return!x.resposta}).length||Object.keys(projCliente.decisoes).length;
+      toast("Decisão registada — obrigado.");
+    };
+  });
+}
+
+/* ============================================================
+   SERVICE WORKER — actualização com aviso (blueprint TKD HUB)
+   ============================================================ */
+if("serviceWorker" in navigator && location.protocol!=="file:"){
+  navigator.serviceWorker.register("sw.js").then(function(reg){
+    reg.addEventListener("updatefound",function(){
+      var nw=reg.installing;
+      nw&&nw.addEventListener("statechange",function(){
+        if(nw.state==="installed"&&navigator.serviceWorker.controller){
+          toast("Nova versão disponível — toque para actualizar",{
+            update:true,fixo:true,
+            onclick:function(){nw.postMessage({type:"SKIP_WAITING"})}
+          });
+        }
+      });
+    });
+  }).catch(function(){});
+  var recarregou=false;
+  navigator.serviceWorker.addEventListener("controllerchange",function(){
+    if(recarregou)return;recarregou=true;location.reload();
+  });
+}
+
+/* ============================================================
+   ARRANQUE
+   ============================================================ */
+(function arranque(){
+  carregarLocal();
+  ligarUpload("f-cup",{maxW:1600,pasta:"capas"},function(u){$("f-capa").value=u});
+  /* preencher senha vinda do convite (?k=…) */
+  var k=new URLSearchParams(location.search).get("k");
+  if(k)$("gate-pass").value=k;
+  /* no arranque o traço corre em silêncio (os browsers não permitem
+     áudio sem gesto); se o utilizador tocar durante a cortina, o
+     traço reinicia JUNTO com o som — perfeitamente sincronizados */
+  iniciarTraco(false);
+  /* rede de segurança: aconteça o que acontecer, a cortina nunca
+     fica presa mais de 5s (queda simples, sem coreografia) */
+  (function rede(){
+    setTimeout(function(){
+      var i=$("intro");
+      if(i.classList.contains("off")||i.classList.contains("zoom"))return;
+      if(Date.now()<introFim+3500){rede();return}   /* traço reiniciado — esperar */
+      i.classList.add("off");
+    },5000);
+  })();
+  function gestoIntro(){
+    var i=$("intro");
+    if(!i.classList.contains("off")&&!i.classList.contains("zoom"))
+      iniciarTraco(true);            /* recomeço síncrono: som + desenho */
+    window.removeEventListener("pointerdown",gestoIntro,true);
+  }
+  window.addEventListener("pointerdown",gestoIntro,true);
+
+  function aterrarEm(vista){
+    mostrar(vista);
+    var alvo=vista==="gate"
+      ?document.querySelector("#view-gate .tkd-logo")
+      :document.querySelector("#view-"+vista+" .topbar .tkd-logo");
+    esperarTraco().then(function(){
+      introAterrar(alvo,vista==="gate"?revelarGate:null);
+      if(vista==="gate")$("gate-pass").focus();
+    });
+  }
+
+  iniciarFirebase().then(function(){
+    /* repor sessões */
+    var adm=null,cli=null;
+    try{adm=sessionStorage.getItem("tkd_admin");
+        cli=JSON.parse(sessionStorage.getItem("tkd_cli")||"null")}catch(e){}
+    if(adm==="1"){ouvirTudo();renderAdminGrid();aterrarEm("admin");return}
+    if(cli&&cli.id){
+      var abrir=function(p){
+        if(p&&p.senhaHash===cli.h){DB.projetos[p.id]=p;guardarLocal();
+          ouvirProjeto(p.id);renderClient(p);aterrarEm("client");return true}
+        return false;
+      };
+      if(fb.ref){
+        fb.ref.child("projetos/"+cli.id).once("value").then(function(s){
+          if(!abrir(s.val())&&!abrir(DB.projetos[cli.id]))aterrarEm("gate");
+        }).catch(function(){if(!abrir(DB.projetos[cli.id]))aterrarEm("gate")});
+        return;
+      }
+      if(abrir(DB.projetos[cli.id]))return;
+    }
+    aterrarEm("gate");
+  });
+})();
+</script>
+</body>
+</html>
