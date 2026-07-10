@@ -495,6 +495,7 @@ div.pnlm-tooltip:hover span{visibility:visible}
       <div class="sub" id="admin-sub">Projectos</div>
     </div>
     <span class="sync-dot" id="sync-dot" title="Estado da sincronização"></span>
+    <button class="icon-btn" id="btn-ajustes" title="Ajustes">⚙</button>
     <button class="icon-btn" id="btn-sair-admin" title="Sair">✕</button>
   </header>
   <div class="wrap">
@@ -760,7 +761,7 @@ div.pnlm-tooltip:hover span{visibility:visible}
    (ex.: app "1.0.1" ↔ sw "tkd-view-v1.0.1"). Ao refrescar o link,
    o número no rodapé confirma se a nova versão foi aplicada.
    ============================================================ */
-var APP_VERSION = "1.0.6";
+var APP_VERSION = "1.0.7";
 
 /* PIN de administração — MUDE antes de publicar. */
 var ADMIN_PIN = "8484";
@@ -779,6 +780,18 @@ var FIREBASE_CONFIG = {
 };
 */
 var FB_RAIZ = "tkdview";   /* nó raiz — separado dos dados do HUB */
+
+/* A configuração pode também ser colada no painel Ajustes (⚙ na
+   administração) — fica guardada no aparelho e tem prioridade
+   sobre a constante acima. O interruptor de sincronização dos
+   Ajustes desliga ambas. */
+function lerConfigFBGuardada(){
+  try{return JSON.parse(localStorage.getItem("tkdview_fbcfg")||"null")}catch(e){return null}
+}
+function configEfetiva(){
+  if(localStorage.getItem("tkdview_sync_off")==="1")return null;
+  return lerConfigFBGuardada()||FIREBASE_CONFIG;
+}
 
 /* ---------------- utilidades ---------------- */
 function $(id){return document.getElementById(id)}
@@ -865,10 +878,13 @@ function pontosSync(estado){
     el.className="sync-dot"+(estado==="on"?" on":estado==="local"?" local":"");
     el.title=estado==="on"?"Sincronizado (Firebase)":estado==="local"?"Modo local — só neste aparelho":"A ligar…";
   });
+  var aj=$("aj-estado");
+  if(aj)aj.textContent=estado==="on"?"Sincronizado":estado==="local"?"Desligado — modo local":"A ligar…";
 }
 function iniciarFirebase(){
   return new Promise(function(res){
-    if(!FIREBASE_CONFIG){pontosSync("local");return res(false)}
+    var CFG=configEfetiva();
+    if(!CFG){pontosSync("local");return res(false)}
     function carregar(src){return new Promise(function(r,j){
       var s=document.createElement("script");s.src=src;s.onload=r;s.onerror=j;document.head.appendChild(s);
     })}
@@ -876,7 +892,7 @@ function iniciarFirebase(){
       .then(function(){return carregar("https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js")})
       .then(function(){return carregar("https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js").catch(function(){})})
       .then(function(){
-        firebase.initializeApp(FIREBASE_CONFIG);
+        firebase.initializeApp(CFG);
         fb.ref=firebase.database().ref(FB_RAIZ);
         firebase.database().ref(".info/connected").on("value",function(s){
           fb.ligado=!!s.val();pontosSync(fb.ligado?"on":"");
@@ -1143,7 +1159,7 @@ function redimensionarImg(file,maxW){
 function uploadImagem(file,opts){
   opts=opts||{};
   return new Promise(function(res,rej){
-    if(!FIREBASE_CONFIG||!window.firebase||!firebase.storage){rej(new Error("sem-storage"));return}
+    if(!configEfetiva()||!window.firebase||!firebase.storage){rej(new Error("sem-storage"));return}
     redimensionarImg(file,opts.maxW||2000).then(function(blob){
       var caminho=FB_RAIZ+"/"+(opts.pasta||"geral")+"/"+uid()+".jpg";
       var ref=firebase.storage().ref().child(caminho);
@@ -1166,7 +1182,9 @@ function ligarUpload(pref,opts,aoUrl){
   var b=$(pref+"-btn"),f=$(pref+"-file");
   if(!b||!f)return;
   b.onclick=function(){
-    if(!FIREBASE_CONFIG){toast("Configure o Firebase (com storageBucket) para carregar ficheiros.");return}
+    var cfg=configEfetiva();
+    if(!cfg){toast("Abra os Ajustes (⚙) e ligue o Firebase para carregar ficheiros.");return}
+    if(!cfg.storageBucket){toast("A configuração não tem storageBucket — acrescente-o nos Ajustes.");return}
     f.click();
   };
   f.onchange=function(){
@@ -2299,8 +2317,10 @@ function renderClDecs(){
 /* ============================================================
    SERVICE WORKER — actualização com aviso (blueprint TKD HUB)
    ============================================================ */
+var _swReg=null;
 if("serviceWorker" in navigator && location.protocol!=="file:"){
   navigator.serviceWorker.register("sw.js").then(function(reg){
+    _swReg=reg;
     reg.addEventListener("updatefound",function(){
       var nw=reg.installing;
       nw&&nw.addEventListener("statechange",function(){
@@ -2318,6 +2338,115 @@ if("serviceWorker" in navigator && location.protocol!=="file:"){
     if(recarregou)return;recarregou=true;location.reload();
   });
 }
+
+
+/* ============================================================
+   AJUSTES — sincronização, ficheiros e actualização
+   (espelho do painel do TKD HUB)
+   ============================================================ */
+function parseConfigFB(txt){
+  txt=(txt||"").trim();
+  if(!txt)return null;
+  try{return JSON.parse(txt)}catch(e){}
+  try{return (new Function("return ("+txt+")"))()}catch(e){return undefined}
+}
+function abrirAjustes(){
+  var guardada=lerConfigFBGuardada(),
+      efetiva=configEfetiva(),
+      desligado=localStorage.getItem("tkdview_sync_off")==="1";
+  modal(
+    '<h3>Ajustes</h3><div class="sub">Sincronização · ficheiros · aplicação</div>'
+
+    +'<label>Sincronização (Firebase)</label>'
+    +'<div class="share-box" style="align-items:center;gap:10px">'
+      +'<span class="sync-dot '+(fb.ligado?"on":(efetiva?"":"local"))+'"></span>'
+      +'<span id="aj-estado">'+(fb.ligado?"Sincronizado":(efetiva?"A ligar…":"Desligado — modo local"))+'</span>'
+    +'</div>'
+    +'<label>Configuração — cole o objecto do Firebase (o mesmo do TKD HUB)</label>'
+    +'<textarea id="aj-cfg" spellcheck="false" style="font-family:var(--font-mono);font-size:12px;min-height:120px" '
+      +'placeholder=\'{ "apiKey": "…", "databaseURL": "https://….firebasedatabase.app", "projectId": "…", "storageBucket": "….appspot.com" }\'>'
+      +esc(guardada?JSON.stringify(guardada,null,2):"")+'</textarea>'
+    +'<p class="hint">Aceita o formato JSON ou o excerto tal como o Firebase o mostra. '
+      +'Com <b>storageBucket</b>, os botões «⭱ Carregar do aparelho» ficam activos — estado actual: '
+      +'<b>'+((efetiva&&efetiva.storageBucket)?"upload directo disponível":"upload indisponível")+'</b>.</p>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'
+      +'<button class="btn mini accent" id="aj-ligar">Guardar e ligar</button>'
+      +(efetiva?'<button class="btn mini danger" id="aj-off">Desligar sincronização</button>':'')
+      +(desligado?'<button class="btn mini ghost" id="aj-on">Voltar a ligar</button>':'')
+    +'</div>'
+
+    +'<label>Aplicação</label>'
+    +'<div class="share-box"><span><span class="k">versão instalada</span><br>v'+APP_VERSION+'</span>'
+    +'<span><span class="k">aparelho</span><br>'+esc(fb.deviceId)+'</span></div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'
+      +'<button class="btn mini ghost" id="aj-upd">Procurar actualização</button>'
+      +'<button class="btn mini ghost" id="aj-reload">Recarregar app</button>'
+    +'</div>'
+    +'<p class="hint">«Procurar actualização» verifica se há uma nova versão publicada (sequência APP_VERSION ↔ CACHE_VERSION). «Recarregar app» limpa a cache local e reabre — os dados não são afectados.</p>'
+
+    +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Fechar</button></div>'
+  );
+
+  $("aj-ligar").onclick=function(){
+    var txt=$("aj-cfg").value,cfg=parseConfigFB(txt);
+    if(cfg===undefined){toast("Configuração ilegível — verifique o texto colado.");return}
+    if(cfg===null){
+      if(FIREBASE_CONFIG){ /* sem texto: usar a constante do código */
+        localStorage.removeItem("tkdview_fbcfg");
+        localStorage.removeItem("tkdview_sync_off");
+        toast("A ligar com a configuração do código…");
+        setTimeout(function(){location.reload()},700);
+        return;
+      }
+      toast("Cole a configuração do Firebase.");return;
+    }
+    if(!cfg.apiKey||!cfg.projectId||!cfg.databaseURL){
+      toast("Faltam campos: apiKey, projectId e databaseURL são obrigatórios.");return;
+    }
+    try{localStorage.setItem("tkdview_fbcfg",JSON.stringify(cfg))}catch(e){}
+    localStorage.removeItem("tkdview_sync_off");
+    toast("Configuração guardada — a ligar…");
+    setTimeout(function(){location.reload()},700);
+  };
+  var off=$("aj-off");
+  if(off)off.onclick=function(){
+    if(!confirm("Desligar a sincronização? A app passa a modo local neste aparelho; os dados na nuvem ficam intactos."))return;
+    localStorage.setItem("tkdview_sync_off","1");
+    toast("Sincronização desligada.");
+    setTimeout(function(){location.reload()},700);
+  };
+  var on=$("aj-on");
+  if(on)on.onclick=function(){
+    localStorage.removeItem("tkdview_sync_off");
+    toast("A voltar a ligar…");
+    setTimeout(function(){location.reload()},700);
+  };
+  $("aj-upd").onclick=function(){
+    if(!_swReg){toast("Actualizações indisponíveis neste contexto.");return}
+    toast("A verificar…",{fixo:true});
+    _swReg.update().then(function(){
+      setTimeout(function(){
+        if(_swReg.waiting){
+          toast("Nova versão pronta — toque para aplicar",{update:true,fixo:true,
+            onclick:function(){_swReg.waiting.postMessage({type:"SKIP_WAITING"})}});
+        }else if(_swReg.installing){
+          toast("A transferir a nova versão… o aviso aparecerá quando estiver pronta.",{ms:4500});
+        }else{
+          toast("Está na versão mais recente — v"+APP_VERSION+".");
+        }
+      },1200);
+    }).catch(function(){toast("Não foi possível verificar agora.")});
+  };
+  $("aj-reload").onclick=function(){
+    toast("A recarregar…",{fixo:true});
+    var done=function(){location.reload()};
+    if(window.caches&&caches.keys){
+      caches.keys().then(function(ns){return Promise.all(ns.map(function(n){return caches.delete(n)}))})
+        .then(done).catch(done);
+    }else done();
+  };
+}
+$("btn-ajustes").addEventListener("click",abrirAjustes);
 
 /* ============================================================
    ARRANQUE

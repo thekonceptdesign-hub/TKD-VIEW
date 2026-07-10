@@ -5,7 +5,7 @@
    index.html (ex.: v1.0.0 → v1.0.1). Isso garante que a cache antiga
    é substituída e que o aviso "nova versão disponível" aparece. */
 
-const CACHE_VERSION = "tkd-view-v1.0.6"; /* ↔ APP_VERSION "1.0.6" no index.html */
+const CACHE_VERSION = "tkd-view-v1.0.7"; /* ↔ APP_VERSION "1.0.7" no index.html */
 const APP_SHELL = [
   "./",
   "./index.html",

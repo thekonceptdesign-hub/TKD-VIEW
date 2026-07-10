@@ -1,13 +1,13 @@
-# TKD VIEW — v1.0.3
+# TKD VIEW — v1.0.7
 
 Visualização interactiva de projectos para clientes: tour 360º com hotspots, revisões, decisões rápidas e mensagens. Segue o blueprint do TKD HUB (APP_VERSION ↔ CACHE_VERSION, sincronização Firebase com escritas parciais, PWA offline).
 
 ## Publicar
 1. Coloque os 6 ficheiros na mesma pasta do seu alojamento (GitHub Pages, etc.): `index.html`, `sw.js`, `manifest.webmanifest` e os 3 ícones.
-2. Abra o `index.html` e, no topo do `<script>`:
-   - Mude o `ADMIN_PIN` (por omissão `8484`).
-   - Cole o seu `FIREBASE_CONFIG` (o mesmo objecto do TKD HUB). Sem ele, a app funciona só em modo local — os clientes noutros aparelhos não verão nada.
-3. A cada nova publicação, suba `APP_VERSION` no `index.html` **e** `CACHE_VERSION` no `sw.js` na mesma sequência (1.0.0 → 1.0.1 → …). O rodapé mostra a versão activa e o aviso «Nova versão disponível» aparece nos aparelhos dos clientes.
+2. Abra o `index.html` e mude o `ADMIN_PIN` (por omissão `8484`).
+3. **Firebase pelo painel de Ajustes (recomendado):** entre na administração, toque em ⚙ e cole a configuração do Firebase (a mesma do TKD HUB). Fica guardada no aparelho e liga de imediato. Em alternativa, pode fixá-la no código (`FIREBASE_CONFIG` no topo do `<script>`). Sem configuração, a app funciona só em modo local — os clientes noutros aparelhos não verão nada.
+   No painel de Ajustes também pode: desligar/religar a sincronização, ver o estado do upload directo (requer `storageBucket`), procurar actualizações e recarregar a app com limpeza de cache.
+4. A cada nova publicação, suba `APP_VERSION` no `index.html` **e** `CACHE_VERSION` no `sw.js` na mesma sequência (1.0.0 → 1.0.1 → …). O rodapé mostra a versão activa e o aviso «Nova versão disponível» aparece nos aparelhos dos clientes.
 
 ## Fluxo de trabalho
 - **Administração**: no portão, toque em «Acesso TKD» e insira o PIN. Crie o projecto (a senha única é gerada automaticamente), adicione as cenas 360º, coloque os hotspots clicando na imagem, publique revisões e peça decisões.
