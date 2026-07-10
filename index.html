@@ -761,7 +761,7 @@ div.pnlm-tooltip:hover span{visibility:visible}
    (ex.: app "1.0.1" ↔ sw "tkd-view-v1.0.1"). Ao refrescar o link,
    o número no rodapé confirma se a nova versão foi aplicada.
    ============================================================ */
-var APP_VERSION = "1.0.9";
+var APP_VERSION = "1.0.10";
 
 /* PIN de administração — MUDE antes de publicar. */
 var ADMIN_PIN = "8484";
@@ -1229,23 +1229,47 @@ function redimensionarImg(file,maxW){
     img.src=URL.createObjectURL(file);
   });
 }
+function destinoUpload(){return localStorage.getItem("tkdview_up_dest")||"auto"}
 function uploadImagem(file,opts){
   opts=opts||{};
-  var cfg=configEfetiva();
+  var cfg=configEfetiva(),dest=destinoUpload();
   var temStorage=cfg&&cfg.storageBucket&&window.firebase&&firebase.storage;
-  if(!temStorage)return uploadParaBD(file,opts);
+  if(dest==="bd"||!temStorage)return uploadParaBD(file,opts);
+  /* Storage, com rede de segurança: se ficar preso em 0% (Storage
+     não activado ou regras a bloquear), desiste ao fim de 15 s e
+     guarda na base de dados — o upload nunca fica pendurado. */
   return new Promise(function(res,rej){
+    var resolvido=false;
+    function cairParaBD(motivo){
+      if(resolvido)return;resolvido=true;
+      if(dest==="storage"){toast("O Storage não respondeu ("+motivo+"). Verifique se está activado e as regras.");rej(new Error(motivo));return}
+      toast("Storage sem resposta — a guardar na base de dados…",{ms:3000});
+      uploadParaBD(file,opts).then(res).catch(rej);
+    }
     redimensionarImg(file,opts.maxW||2000).then(function(blob){
       var caminho=FB_RAIZ+"/"+(opts.pasta||"geral")+"/"+uid()+".jpg";
       var ref=firebase.storage().ref().child(caminho);
-      var tarefa=ref.put(blob,{contentType:"image/jpeg",cacheControl:"public,max-age=31536000"});
+      var tarefa;
+      try{tarefa=ref.put(blob,{contentType:"image/jpeg",cacheControl:"public,max-age=31536000"})}
+      catch(e){cairParaBD("erro ao iniciar");return}
+      var vigia=setTimeout(function(){
+        try{tarefa.cancel()}catch(e){}
+        cairParaBD("preso em 0%");
+      },15000);
       tarefa.on("state_changed",function(st){
+        if(st.bytesTransferred>0)clearTimeout(vigia); /* há progresso real */
         var pct=st.totalBytes?Math.round(st.bytesTransferred/st.totalBytes*100):0;
-        toast("A carregar… "+pct+"%",{fixo:true});
-      },function(e){toast("Falha no carregamento.");rej(e)},function(){
-        ref.getDownloadURL().then(function(u){toast("Imagem carregada.");res(u)}).catch(rej);
+        if(!resolvido)toast("A carregar… "+pct+"%",{fixo:true});
+      },function(e){
+        clearTimeout(vigia);
+        cairParaBD("recusado pelas regras");
+      },function(){
+        clearTimeout(vigia);
+        if(resolvido)return;resolvido=true;
+        ref.getDownloadURL().then(function(u){toast("Imagem carregada.");res(u)})
+          .catch(function(){cairParaBD("sem URL");resolvido=false});
       });
-    }).catch(rej);
+    }).catch(function(){cairParaBD("imagem ilegível")});
   });
 }
 /* sem Storage: comprimir e gravar na Realtime Database */
@@ -2486,9 +2510,15 @@ function abrirAjustes(){
       +esc(guardada?JSON.stringify(guardada,null,2):"")+'</textarea>'
     +'<p class="hint">Configura-se <b>apenas neste aparelho principal</b>: os links de convite passam a transportar a ligação, e cada cliente fica ligado automaticamente na primeira abertura — sem configurar nada. Aceita o formato JSON ou o excerto tal como o Firebase o mostra. '
       +'Upload directo — estado actual: <b>'
-      +((efetiva&&efetiva.storageBucket)?"via Firebase Storage"
+      +((efetiva&&efetiva.storageBucket)?(destinoUpload()==="bd"?"base de dados (por escolha)":"Storage, com recurso automático à base de dados")
         :efetiva?"pela base de dados (sem Storage; imagens comprimidas até ≈1,4 MB)"
         :"modo local — imagens só neste aparelho")+'</b>.</p>'
+    +'<label>Destino do upload</label>'
+    +'<select id="aj-updest">'
+      +'<option value="auto"'+(destinoUpload()==="auto"?" selected":"")+'>Automático — Storage; se falhar, base de dados</option>'
+      +'<option value="bd"'+(destinoUpload()==="bd"?" selected":"")+'>Base de dados — sempre (recomendado sem Storage activo)</option>'
+      +'<option value="storage"'+(destinoUpload()==="storage"?" selected":"")+'>Storage — sempre (avisa se falhar)</option>'
+    +'</select>'
     +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'
       +'<button class="btn mini accent" id="aj-ligar">Guardar e ligar</button>'
       +(efetiva?'<button class="btn mini danger" id="aj-off">Desligar sincronização</button>':'')
@@ -2507,6 +2537,10 @@ function abrirAjustes(){
     +'<div class="acts"><button class="btn ghost" onclick="fecharModal()">Fechar</button></div>'
   );
 
+  $("aj-updest").onchange=function(){
+    localStorage.setItem("tkdview_up_dest",this.value);
+    toast("Destino do upload guardado.");
+  };
   $("aj-ligar").onclick=function(){
     var txt=$("aj-cfg").value,cfg=parseConfigFB(txt);
     if(cfg===undefined){toast("Configuração ilegível — verifique o texto colado.");return}
